@@ -6,6 +6,7 @@ import { Timeline } from "@/components/dashboard/Timeline";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { RankCheckButton } from "@/components/dashboard/RankCheckButton";
 import { AIInsightButton } from "@/components/dashboard/AIInsightButton";
+import { TestAPIButton } from "@/components/dashboard/TestAPIButton";
 import { businessService } from "@/services/businessService";
 import type { Business, Keyword, Snapshot, GridPoint } from "@/types";
 import { Map as MapIcon, Download, Users, ImageIcon, MapPin, Zap, Database, Search, MoreHorizontal, ArrowRightLeft, Activity, CheckCircle2 } from "lucide-react";
@@ -182,14 +183,15 @@ export default function Dashboard() {
                   </div>
                </div>
                <div className="flex items-center gap-3">
-                 {selectedKeywordId && currentBusiness && (
-                   <RankCheckButton
-                     keyword={keywords.find(k => k.id === selectedKeywordId)?.text || ""}
-                     placeId={currentBusiness.place_id}
-                     businessId={currentBusiness.id}
-                     onSuccess={() => loadInitialData()}
-                   />
-                 )}
+                 <TestAPIButton />
+                 <RankCheckButton 
+                   keyword={selectedKeyword?.text || ""}
+                   placeId="ChIJ..." 
+                   businessId={businesses[0]?.id || ""}
+                   onSuccess={() => {
+                     // Refresh data after successful rank check
+                   }}
+                 />
                  
                  {currentBusiness && (
                    <AIInsightButton
