@@ -46,16 +46,8 @@ export function BusinessSelector({ currentBusiness, onSelectBusiness }: Business
     console.log("🔧 Dialog opened, initializing autocomplete...");
     setIsLoading(true);
 
-    // Use loadCallback method which returns a promise
-    loaderRef.current
-      .loadCallback((e: Event) => {
-        if (e.type === 'error') {
-          console.error("❌ Failed to load Google Maps:", e);
-          setError("Failed to load Google Maps. Please try again.");
-          setIsLoading(false);
-          return;
-        }
-      })
+    // Use the load() method which is the standard API
+    (loaderRef.current as any).load()
       .then(() => {
         console.log("✅ Google Maps loaded successfully");
         
