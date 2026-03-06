@@ -26,11 +26,11 @@ declare global {
 
 export function BusinessSelector({ currentBusiness, onSelectBusiness }: BusinessSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
   const scriptLoadedRef = useRef(false);
+  const placeSelectedRef = useRef(false);
 
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
 
@@ -75,6 +75,7 @@ export function BusinessSelector({ currentBusiness, onSelectBusiness }: Business
       if (autocompleteRef.current) {
         google.maps.event.clearInstanceListeners(autocompleteRef.current);
       }
+      placeSelectedRef.current = false;
     };
   }, [isOpen, apiKey]);
 
@@ -100,9 +101,10 @@ export function BusinessSelector({ currentBusiness, onSelectBusiness }: Business
 
       console.log("✅ Autocomplete instance created");
 
-      // Add place_changed listener
-      autocomplete.addListener("place_changed", () => {
+      // CRITICAL: Add place_changed listener
+      google.maps.event.addListener(autocomplete, "place_changed", () => {
         console.log("🔔 place_changed event fired!");
+        placeSelectedRef.current = true;
         handlePlaceSelection(autocomplete);
       });
 
@@ -178,6 +180,20 @@ export function BusinessSelector({ currentBusiness, onSelectBusiness }: Business
     console.log("✅ Selection complete!");
   };
 
+  // Handle form submission (Enter key)
+  const handleFormSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    console.log("📝 Form submitted, placeSelectedRef:", placeSelectedRef.current);
+    
+    if (!placeSelectedRef.current) {
+      setError("Please select a business from the dropdown suggestions.");
+      return;
+    }
+    
+    // If place was selected, the event listener already handled it
+    // This is just a fallback
+  };
+
   if (!apiKey) {
     return (
       <div className="px-2 py-4 text-center">
@@ -232,7 +248,7 @@ export function BusinessSelector({ currentBusiness, onSelectBusiness }: Business
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <form onSubmit={handleFormSubmit} className="space-y-4">
           <div>
             <label className="text-xs font-bold text-slate-600 mb-1.5 block">
               Business Name and Location
@@ -241,15 +257,10 @@ export function BusinessSelector({ currentBusiness, onSelectBusiness }: Business
               ref={inputRef}
               placeholder="Start typing business name (e.g., Starbucks Phoenix)..."
               className="h-11"
-              onKeyDown={(e) => {
-                // Prevent form submission on Enter
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                }
-              }}
+              autoComplete="off"
             />
             <p className="text-xs text-slate-500 mt-2">
-              💡 Type your business name and location, then select from dropdown
+              💡 Type your business name and location, then **click** on a suggestion from the dropdown
             </p>
           </div>
 
@@ -277,7 +288,7 @@ export function BusinessSelector({ currentBusiness, onSelectBusiness }: Business
               </div>
             </div>
           )}
-        </div>
+        </form>
       </DialogContent>
     </Dialog>
   );
