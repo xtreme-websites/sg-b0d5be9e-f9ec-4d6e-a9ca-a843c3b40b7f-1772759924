@@ -118,7 +118,8 @@ export default async function handler(
     const transformedData = {
       average_rank: data.average_rank || 0,
       visibility_score: data.visibility_score || 0,
-      grid_points: data.grid_points || []
+      grid_points: data.grid_points || [],
+      competitors: data.competitors || [] 
     };
 
     return res.status(200).json({

@@ -27,7 +27,7 @@ export function RankCheckButton({ keyword, placeId, businessId, onSuccess }: Ran
 
       toast({
         title: "✅ Rank Check Complete",
-        description: `Average Rank: ${result.avg_rank.toFixed(1)} | Visibility: ${result.visibility_score}%`
+        description: `Average Rank: ${result.average_rank.toFixed(1)} | Visibility: ${result.visibility_score}%`
       });
 
       if (onSuccess) onSuccess();
