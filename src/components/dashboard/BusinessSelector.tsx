@@ -46,10 +46,18 @@ export function BusinessSelector({ currentBusiness, onSelectBusiness }: Business
     console.log("🔧 Dialog opened, initializing autocomplete...");
     setIsLoading(true);
 
+    // Use loadCallback method which returns a promise
     loaderRef.current
-      .importLibrary("places")
+      .loadCallback((e: Event) => {
+        if (e.type === 'error') {
+          console.error("❌ Failed to load Google Maps:", e);
+          setError("Failed to load Google Maps. Please try again.");
+          setIsLoading(false);
+          return;
+        }
+      })
       .then(() => {
-        console.log("✅ Google Maps Places library loaded successfully");
+        console.log("✅ Google Maps loaded successfully");
         
         if (!inputRef.current) {
           console.error("❌ Input ref lost during load");
