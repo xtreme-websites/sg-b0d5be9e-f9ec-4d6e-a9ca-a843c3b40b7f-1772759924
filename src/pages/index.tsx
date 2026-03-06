@@ -133,6 +133,8 @@ export default function Dashboard() {
     ? currentSnapshot.points[selectedPointIndex]
     : null;
 
+  const selectedKeyword = keywords.find(k => k.id === selectedKeywordId);
+
   return (
     <div className="flex h-screen bg-[#f1f5f9] font-sans text-slate-900 overflow-hidden">
       <Head>
