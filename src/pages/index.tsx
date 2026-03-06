@@ -4,6 +4,8 @@ import { Sidebar } from "@/components/dashboard/Sidebar";
 import { RankGrid } from "@/components/dashboard/RankGrid";
 import { Timeline } from "@/components/dashboard/Timeline";
 import { StatCard } from "@/components/dashboard/StatCard";
+import { RankCheckButton } from "@/components/dashboard/RankCheckButton";
+import { AIInsightButton } from "@/components/dashboard/AIInsightButton";
 import { businessService } from "@/services/businessService";
 import type { Business, Keyword, Snapshot, GridPoint } from "@/types";
 import { Map as MapIcon, Download, Users, ImageIcon, MapPin, Zap, Database, Search, MoreHorizontal, ArrowRightLeft, Activity, CheckCircle2 } from "lucide-react";
@@ -180,6 +182,24 @@ export default function Dashboard() {
                   </div>
                </div>
                <div className="flex items-center gap-3">
+                 {selectedKeywordId && currentBusiness && (
+                   <RankCheckButton
+                     keyword={keywords.find(k => k.id === selectedKeywordId)?.text || ""}
+                     placeId={currentBusiness.place_id}
+                     businessId={currentBusiness.id}
+                     onSuccess={() => loadInitialData()}
+                   />
+                 )}
+                 
+                 {currentBusiness && (
+                   <AIInsightButton
+                     businessName={currentBusiness.name}
+                     currentRank={currentSnapshot?.avg_rank}
+                     previousRank={snapshots.length > 1 ? snapshots[1].avg_rank : undefined}
+                     competitors={currentSnapshot?.points[0]?.competitors.map(c => c.name) || []}
+                   />
+                 )}
+
                  <button onClick={() => setViewMode('history')} className="h-11 px-5 bg-indigo-50 text-indigo-700 rounded-2xl text-xs font-black border border-indigo-100 hover:bg-indigo-100 transition-all flex items-center gap-2">
                    <ImageIcon size={16}/> ALL HISTORY
                  </button>
