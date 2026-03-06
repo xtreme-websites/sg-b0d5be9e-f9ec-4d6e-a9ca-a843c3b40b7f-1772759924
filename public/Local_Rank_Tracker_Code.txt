@@ -1,0 +1,689 @@
+import React, { useState, useMemo } from 'react';
+import { 
+  MapPin, Search, BarChart3, History, Settings, TrendingUp, TrendingDown, 
+  Globe, Phone, Star, Plus, Trash2, Layers, Map as MapIcon, ChevronRight, 
+  Filter, Download, Calendar, Grid3X3, X, CheckCircle2, Mail, ShieldCheck, 
+  Zap, Users, Database, ArrowRightLeft, Bell, Sparkles, Loader2, Lightbulb, 
+  Crown, AlertCircle, ExternalLink, Package, Activity, ChevronLeft, Image as ImageIcon,
+  ChevronsLeft, ChevronsRight, PlusCircle, MoreHorizontal, Edit2
+} from 'lucide-react';
+
+// Gemini API Configuration
+const apiKey = ""; 
+const GEMINI_MODEL = "gemini-2.5-flash-preview-09-2025";
+
+const callGemini = async (prompt, systemInstruction = "") => {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
+  let delay = 1000;
+  for (let i = 0; i < 5; i++) {
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          systemInstruction: systemInstruction ? { parts: [{ text: systemInstruction }] } : undefined
+        })
+      });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      const data = await response.json();
+      return data.candidates?.[0]?.content?.parts?.[0]?.text;
+    } catch (error) {
+      if (i === 4) throw error;
+      await new Promise(resolve => setTimeout(resolve, delay));
+      delay *= 2;
+    }
+  }
+};
+
+const GRID_SIZE = 7; 
+
+const App = () => {
+  const [viewMode, setViewMode] = useState('dashboard'); // dashboard | admin | history
+  const [adminSubTab, setAdminSubTab] = useState('overview'); 
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [selectedPoint, setSelectedPoint] = useState(null);
+  const [hoveredTimelinePoint, setHoveredTimelinePoint] = useState(null);
+  const [showAiModal, setShowAiModal] = useState(false);
+  const [aiResponse, setAiResponse] = useState(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [newKeywordInput, setNewKeywordInput] = useState("");
+
+  // Admin Specific State
+  const [editingPlan, setEditingPlan] = useState(null); // stores the plan object being edited
+
+  const [connectedBusiness] = useState({
+    name: "Clockwork Pizza",
+    address: "7520 S Rural Rd Ste A9, Tempe, AZ 85283",
+    placeId: "ChIJ...",
+    verified: true,
+    avgRank: 1.10
+  });
+
+  // Keywords State
+  const [keywords, setKeywords] = useState([
+    { id: 1, text: "artisan pizza tempe", trend: 'up', rank: 1.1 },
+    { id: 2, text: "best pizza near me", trend: 'up', rank: 2.4 },
+    { id: 3, text: "pizza delivery 85283", trend: 'down', rank: 5.2 },
+    { id: 4, text: "italian restaurant tempe", trend: 'up', rank: 8.1 },
+    { id: 5, text: "pizza deals az", trend: 'none', rank: 12.4 },
+    { id: 6, text: "late night pizza", trend: 'up', rank: 3.1 },
+    { id: 7, text: "family pizza restaurant", trend: 'down', rank: 15.2 },
+    { id: 8, text: "thin crust pizza", trend: 'up', rank: 1.4 },
+    { id: 9, text: "pepperoni pizza tempe", trend: 'none', rank: 4.5 },
+    { id: 10, text: "gluten free pizza", trend: 'up', rank: 9.2 },
+    { id: 11, text: "pizza catering", trend: 'up', rank: 2.1 },
+  ]);
+
+  const addKeyword = () => {
+    if (newKeywordInput.trim()) {
+      setKeywords([{
+        id: Date.now(),
+        text: newKeywordInput,
+        trend: 'none',
+        rank: '--'
+      }, ...keywords]);
+      setNewKeywordInput("");
+    }
+  };
+
+  // Mock historical data for the timeline
+  const timelineData = useMemo(() => {
+    const dates = ["Dec 08", "Dec 22", "Jan 05", "Jan 19", "Feb 02", "Feb 16", "Mar 02", "Mar 16", "Mar 30", "Apr 13"];
+    return dates.map((date, i) => ({
+      id: i,
+      date,
+      avgRank: (1.5 - (i * 0.05)).toFixed(2),
+      visibility: (85 + (i * 1.5)).toFixed(0) + '%',
+      color: i > 7 ? 'bg-indigo-500' : 'bg-green-500',
+      active: i === 6
+    }));
+  }, []);
+
+  const gridResults = useMemo(() => {
+    return Array.from({ length: GRID_SIZE * GRID_SIZE }).map((_, i) => {
+      const row = Math.floor(i / GRID_SIZE);
+      const col = i % GRID_SIZE;
+      const distFromCenter = Math.sqrt(Math.pow(row - 3, 2) + Math.pow(col - 3, 2));
+      let rank = Math.floor(distFromCenter * 1.5) + 1;
+      if (distFromCenter > 3.5) rank = 21; 
+      return { id: i, rank, row, col };
+    });
+  }, []);
+
+  const getRankStyles = (rank) => {
+    if (rank === 1) return 'bg-[#10b981] text-white shadow-lg shadow-green-100 ring-4 ring-green-50 scale-110';
+    if (rank <= 3) return 'bg-[#10b981] text-white shadow-md ring-2 ring-green-50';
+    if (rank <= 10) return 'bg-[#facc15] text-white shadow-md ring-2 ring-yellow-50';
+    if (rank <= 20) return 'bg-[#f97316] text-white shadow-md ring-2 ring-orange-50';
+    return 'bg-[#94a3b8] text-white shadow-md ring-2 ring-slate-100';
+  };
+
+  const getRankIcon = (rank) => {
+    if (rank === 1) return <Star size={10} fill="white" stroke="white" />;
+    if (rank <= 3) return <Crown size={10} />;
+    if (rank > 20) return <X size={10} />;
+    return null;
+  };
+
+  return (
+    <div className="flex h-screen bg-[#f1f5f9] font-sans text-slate-900 overflow-hidden">
+      
+      {/* Plan Editor Modal */}
+      {editingPlan && (
+        <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm z-[100] flex items-center justify-center p-6">
+          <div className="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden border border-slate-200 animate-in zoom-in-95 duration-200">
+            <div className="p-8 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-indigo-100 text-indigo-600 rounded-xl"><Edit2 size={20}/></div>
+                <h2 className="font-black text-slate-800 text-lg">Configure {editingPlan.name} Tier</h2>
+              </div>
+              <button onClick={() => setEditingPlan(null)} className="text-slate-400 hover:text-slate-600 transition-colors"><X size={20}/></button>
+            </div>
+            <div className="p-8 space-y-6">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Max Keywords</label>
+                  <input type="number" defaultValue={editingPlan.kws} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none" />
+                </div>
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Monthly Price ($)</label>
+                  <input type="number" defaultValue={editingPlan.price} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none" />
+                </div>
+              </div>
+              <div className="space-y-4">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Feature Switches</label>
+                <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                   <div className="flex items-center gap-3">
+                      <Grid3X3 size={18} className="text-indigo-600" />
+                      <span className="text-sm font-bold text-slate-700">Geo-Grid Maps</span>
+                   </div>
+                   <input type="checkbox" defaultChecked={editingPlan.grid} className="w-5 h-5 rounded-md border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+                </div>
+                <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                   <div className="flex items-center gap-3">
+                      <Mail size={18} className="text-indigo-600" />
+                      <span className="text-sm font-bold text-slate-700">Automated PDF Reports</span>
+                   </div>
+                   <input type="checkbox" defaultChecked={true} className="w-5 h-5 rounded-md border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+                </div>
+                <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                   <div className="flex items-center gap-3">
+                      <Sparkles size={18} className="text-indigo-600" />
+                      <span className="text-sm font-bold text-slate-700">AI Strategy Insights</span>
+                   </div>
+                   <input type="checkbox" defaultChecked={editingPlan.name === 'Premium'} className="w-5 h-5 rounded-md border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+                </div>
+              </div>
+              <div className="pt-4 flex gap-3">
+                <button onClick={() => setEditingPlan(null)} className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition-all">Cancel</button>
+                <button onClick={() => setEditingPlan(null)} className="flex-1 py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 shadow-xl shadow-indigo-100 transition-all">Save Changes</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sidebar Navigation */}
+      <aside className={`bg-white border-r border-slate-200 flex flex-col shadow-xl z-[60] transition-all duration-300 ${isSidebarCollapsed ? 'w-20' : 'w-60'}`}>
+        <div className="p-4 flex flex-col h-full">
+          
+          {/* Brand & Collapse Toggle */}
+          <div className="flex items-center justify-between mb-8 px-2">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg shrink-0">
+                <MapPin size={18} />
+              </div>
+              {!isSidebarCollapsed && (
+                <div className="animate-in fade-in duration-300">
+                  <h1 className="font-black text-base leading-tight tracking-tighter">GeoNinja</h1>
+                </div>
+              )}
+            </div>
+            <button 
+              onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+              className="text-slate-400 hover:text-indigo-600 transition-colors p-1"
+            >
+              {isSidebarCollapsed ? <ChevronsRight size={18} /> : <ChevronsLeft size={18} />}
+            </button>
+          </div>
+
+          {/* Main Navigation */}
+          <nav className="space-y-1 mb-6">
+            {[
+              { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
+              { id: 'history', label: 'Comparison', icon: History },
+            ].map((item) => (
+              <button 
+                key={item.id}
+                onClick={() => setViewMode(item.id)}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all relative group ${viewMode === item.id ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-50'}`}
+              >
+                <item.icon size={18} className="shrink-0" />
+                {!isSidebarCollapsed && <span className="font-bold text-xs">{item.label}</span>}
+              </button>
+            ))}
+          </nav>
+
+          {/* Keywords Section */}
+          <div className="flex-1 flex flex-col overflow-hidden min-h-0 border-t border-slate-100 pt-4">
+            <div className={`flex items-center justify-between mb-3 px-2 ${isSidebarCollapsed ? 'justify-center' : ''}`}>
+               {!isSidebarCollapsed && <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Keywords</span>}
+               <button 
+                 onClick={() => !isSidebarCollapsed && addKeyword()}
+                 className="text-indigo-600 hover:text-indigo-800 transition-colors"
+               >
+                 <PlusCircle size={isSidebarCollapsed ? 20 : 16} />
+               </button>
+            </div>
+
+            {!isSidebarCollapsed && (
+              <div className="px-2 mb-3">
+                <input 
+                  type="text" 
+                  value={newKeywordInput}
+                  onChange={(e) => setNewKeywordInput(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && addKeyword()}
+                  placeholder="Quick add..."
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-[11px] font-bold focus:ring-2 focus:ring-indigo-500 focus:outline-none transition-all"
+                />
+              </div>
+            )}
+
+            <div className="flex-1 overflow-y-auto space-y-1 pr-1 custom-scrollbar">
+              {keywords.map((kw) => (
+                <button 
+                  key={kw.id}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-lg transition-all border border-transparent ${isSidebarCollapsed ? 'justify-center' : 'hover:bg-slate-50 hover:border-slate-100 group'}`}
+                >
+                  <div className="flex items-center gap-2 overflow-hidden">
+                    {kw.trend === 'up' ? <TrendingUp size={14} className="text-green-500 shrink-0" /> : 
+                     kw.trend === 'down' ? <TrendingDown size={14} className="text-red-500 shrink-0" /> : 
+                     <Activity size={14} className="text-slate-300 shrink-0" />}
+                    {!isSidebarCollapsed && <span className="text-[11px] font-bold text-slate-600 truncate">{kw.text}</span>}
+                  </div>
+                  {!isSidebarCollapsed && <span className="text-[10px] font-black text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity">#{kw.rank}</span>}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Bottom Section: Admin */}
+          <div className="mt-4 pt-4 border-t border-slate-100">
+            <button 
+              onClick={() => { setViewMode('admin'); setAdminSubTab('overview'); }}
+              className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-all ${viewMode === 'admin' ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-400 hover:text-indigo-600 hover:bg-slate-50'}`}
+            >
+              <Settings size={18} className="shrink-0" />
+              {!isSidebarCollapsed && <span className="text-xs font-bold animate-in fade-in">Admin Controls</span>}
+            </button>
+          </div>
+        </div>
+      </aside>
+
+      {/* Main Content Area */}
+      <main className="flex-1 flex flex-col overflow-hidden relative">
+        
+        {/* TOP PROGRESS TIMELINE (Dashboard Only) */}
+        {viewMode === 'dashboard' && (
+          <div className="bg-white border-b border-slate-200 px-8 py-3 flex items-center justify-between shrink-0 z-50 shadow-sm">
+            <div className="flex items-center gap-8 flex-1 max-w-4xl">
+               <div className="flex flex-col shrink-0">
+                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Live Timeline</span>
+                  <span className="text-xs font-bold text-slate-700 italic">Snapshot Track</span>
+               </div>
+               
+               <div className="relative flex-1 flex items-center px-4 h-12">
+                  <div className="absolute left-8 right-8 h-[2px] bg-slate-100 top-1/2 -translate-y-1/2 z-0"></div>
+                  
+                  <div className="relative z-10 w-full flex justify-between items-center">
+                    {timelineData.map((point) => (
+                      <div 
+                        key={point.id} 
+                        className="relative"
+                        onMouseEnter={() => setHoveredTimelinePoint(point.id)}
+                        onMouseLeave={() => setHoveredTimelinePoint(null)}
+                      >
+                        <div className={`w-3 h-3 rounded-full cursor-pointer transition-all hover:scale-150 border-2 border-white shadow-sm ${point.color} ${point.active ? 'ring-4 ring-indigo-100 scale-125' : 'opacity-80'}`}></div>
+                        
+                        {hoveredTimelinePoint === point.id && (
+                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 w-32 bg-slate-900 text-white rounded-xl p-3 shadow-2xl animate-in fade-in zoom-in duration-200 z-[100]">
+                             <p className="text-[10px] font-black uppercase text-slate-400 mb-1">{point.date}</p>
+                             <div className="space-y-1">
+                                <div className="flex justify-between items-center">
+                                   <span className="text-[9px] text-slate-400">Avg Rank</span>
+                                   <span className="text-xs font-bold text-green-400">#{point.avgRank}</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                   <span className="text-[9px] text-slate-400">Visibility</span>
+                                   <span className="text-xs font-bold text-indigo-400">{point.visibility}</span>
+                                </div>
+                             </div>
+                             <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-slate-900"></div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+               </div>
+            </div>
+          </div>
+        )}
+
+        {/* View Engine */}
+        {viewMode === 'dashboard' && (
+          <div className="flex-1 overflow-y-auto p-8 animate-in fade-in duration-500">
+             <header className="flex items-center justify-between mb-8">
+               <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-600 border border-indigo-100 shadow-inner">
+                    <MapIcon size={24} />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-black text-slate-800 tracking-tight">Geo-Rank Dashboard</h2>
+                    <p className="text-xs text-slate-400 font-bold italic">Tempe, Arizona • Keyword: artisan pizza tempe</p>
+                  </div>
+               </div>
+               <div className="flex items-center gap-3">
+                 <button onClick={() => setViewMode('history')} className="h-11 px-5 bg-indigo-50 text-indigo-700 rounded-2xl text-xs font-black border border-indigo-100 hover:bg-indigo-100 transition-all flex items-center gap-2">
+                   <ImageIcon size={16}/> ALL HISTORY
+                 </button>
+                 <button className="h-11 px-5 bg-slate-900 text-white rounded-2xl text-xs font-black hover:bg-slate-800 shadow-xl flex items-center gap-2">
+                   <Download size={16} /> EXPORT PDF
+                 </button>
+               </div>
+            </header>
+
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+              <div className="lg:col-span-3">
+                <div className="relative min-h-[700px] rounded-[3rem] border border-slate-200 overflow-hidden shadow-2xl bg-slate-300">
+                    <div className="absolute inset-0 z-0 grayscale-[0.2]" style={{ 
+                      backgroundImage: `url('https://api.mapbox.com/styles/v1/mapbox/streets-v11/static/-111.9261,33.3340,12,0/1200x800?access_token=none')`,
+                      backgroundSize: 'cover', backgroundPosition: 'center'
+                    }}></div>
+                    
+                    <div className="absolute top-6 left-6 z-30 w-full max-w-sm bg-white/95 backdrop-blur-md rounded-[2.5rem] border border-white/50 shadow-2xl p-6">
+                       <div className="flex items-start justify-between mb-4">
+                          <div className="flex items-center gap-3">
+                             <div className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center text-red-500"><MapPin size={16}/></div>
+                             <div>
+                                <h4 className="font-black text-sm text-slate-800">{connectedBusiness.name}</h4>
+                                <p className="text-[10px] font-bold text-slate-400 truncate w-48">{connectedBusiness.address}</p>
+                             </div>
+                          </div>
+                       </div>
+                       <div className="flex items-center justify-between bg-slate-50/50 rounded-2xl p-4 border border-slate-100">
+                          <div className="flex flex-col">
+                             <span className="text-[9px] font-black text-slate-400 uppercase leading-none mb-1">Avg Rank</span>
+                             <span className="text-2xl font-black text-slate-900">{connectedBusiness.avgRank}</span>
+                          </div>
+                          <div className="flex gap-4">
+                             {['High', 'Med', 'Low', 'Out'].map((l, i) => (
+                               <div key={l} className="flex flex-col items-center">
+                                  <div className={`w-2 h-2 rounded-full mb-1 ${i===0?'bg-green-500':i===1?'bg-yellow-400':i===2?'bg-red-500':'bg-slate-300'}`}></div>
+                                  <span className="text-[10px] font-black">{i===0?'100%':'0%'}</span>
+                               </div>
+                             ))}
+                          </div>
+                       </div>
+                    </div>
+
+                    <div className="absolute inset-0 z-10 flex items-center justify-center p-12 lg:p-24">
+                      <div className="w-full h-full grid grid-cols-7 grid-rows-7 gap-4">
+                        {gridResults.map((point) => (
+                          <div 
+                            key={point.id}
+                            onClick={() => setSelectedPoint(point)}
+                            className={`rounded-full flex flex-col items-center justify-center text-[10px] lg:text-[12px] font-black cursor-pointer transition-all hover:scale-150 active:scale-95 z-20 ${getRankStyles(point.rank)}`}
+                          >
+                            {getRankIcon(point.rank)}
+                            <span>{point.rank > 20 ? '20+' : point.rank}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-lg overflow-hidden flex flex-col h-full">
+                  <div className="p-6 border-b border-slate-100 bg-slate-50/50">
+                    <h4 className="font-black text-slate-800 text-sm uppercase tracking-tight flex items-center gap-2"><Users size={16} className="text-indigo-600"/> Local Pack</h4>
+                  </div>
+                  <div className="flex-1 overflow-y-auto">
+                    {[
+                      { name: "Clockwork Pizza", rank: 1, reviews: 44, rating: 5.0, you: true },
+                      { name: "Tempe Dough Works", rank: 2, reviews: 201, rating: 5.0, you: false },
+                      { name: "Sourdough Station", rank: 3, reviews: 9, rating: 5.0, you: false },
+                    ].map((comp, i) => (
+                      <div key={i} className="p-5 border-b border-slate-50">
+                          <div className="flex items-start gap-4">
+                             <div className="flex flex-col items-center">
+                                <div className={`w-1.5 h-1.5 rounded-full mb-1.5 ${comp.rank === 1 ? 'bg-green-500' : 'bg-yellow-400'}`}></div>
+                                <span className="text-[11px] font-black text-slate-400">{comp.rank.toFixed(2)}</span>
+                             </div>
+                             <div className="flex-1">
+                                <div className="flex items-center gap-2">
+                                   <h5 className="text-xs font-black text-slate-800 truncate">{comp.name}</h5>
+                                   {comp.you && <span className="bg-slate-200 text-slate-600 text-[8px] font-black px-1.5 py-0.5 rounded">You</span>}
+                                </div>
+                             </div>
+                          </div>
+                      </div>
+                    ))}
+                  </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {viewMode === 'history' && (
+          <div className="flex-1 overflow-y-auto p-10 bg-white animate-in slide-in-from-right-4 duration-500">
+             <header className="flex items-center justify-between border-b border-slate-100 pb-8 mb-10">
+                <div>
+                  <h2 className="text-3xl font-black text-slate-900 tracking-tighter">Comparison Engine</h2>
+                  <p className="text-slate-500 text-xs font-bold italic">Benchmarking historical snapshots against current data.</p>
+                </div>
+                <div className="flex gap-4">
+                   <div className="flex flex-col gap-1">
+                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Snap A</label>
+                      <select className="px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-[11px] font-black shadow-sm outline-none">
+                         <option>Aug 3, 2025</option>
+                      </select>
+                   </div>
+                   <div className="flex flex-col gap-1">
+                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Snap B</label>
+                      <select className="px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-[11px] font-black shadow-sm outline-none">
+                         <option>Aug 18, 2025</option>
+                      </select>
+                   </div>
+                   <div className="flex items-end">
+                      <button className="h-10 px-6 bg-indigo-600 text-white rounded-xl text-xs font-black shadow-xl flex items-center gap-2 uppercase tracking-widest hover:bg-indigo-700 transition-all">
+                        Compare
+                      </button>
+                   </div>
+                </div>
+             </header>
+
+             <div className="grid grid-cols-2 gap-12">
+                {[1.65, 1.13].map((val, idx) => (
+                  <div key={idx} className="space-y-6">
+                     <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100 shadow-inner">
+                        <span className="text-xs font-black italic">{idx === 0 ? 'Baseline' : 'Comparison'}</span>
+                        <div className="flex items-center gap-4">
+                           <div className="text-right">
+                              <p className="text-[9px] font-black text-slate-400 uppercase">Avg Rank</p>
+                              <p className="text-lg font-black text-slate-900">#{val}</p>
+                           </div>
+                           <div className="text-right">
+                              <p className="text-[9px] font-black text-slate-400 uppercase">Visibility</p>
+                              <p className="text-lg font-black text-indigo-600">{idx === 0 ? '98%' : '100%'}</p>
+                           </div>
+                        </div>
+                     </div>
+                     <div className="aspect-square bg-slate-100 rounded-[3rem] border border-slate-200 shadow-inner p-10 flex items-center justify-center overflow-hidden">
+                        <div className="grid grid-cols-7 gap-2 w-full h-full opacity-60">
+                           {gridResults.map(p => (
+                             <div key={p.id} className={`rounded-full shadow-sm border-2 border-white ${idx === 1 ? 'bg-green-500' : getRankStyles(p.rank)}`}></div>
+                           ))}
+                        </div>
+                     </div>
+                  </div>
+                ))}
+             </div>
+          </div>
+        )}
+
+        {viewMode === 'admin' && (
+          <div className="flex-1 overflow-y-auto p-12 bg-[#fcfdfe] animate-in slide-in-from-bottom-4 duration-500">
+            <div className="max-w-6xl mx-auto space-y-12 pb-24">
+               <header className="flex items-end justify-between border-b border-slate-100 pb-8">
+                  <div>
+                    <h2 className="text-4xl font-black text-slate-900 tracking-tighter italic">Platform Admin</h2>
+                    <p className="text-slate-500 font-bold text-xs uppercase tracking-widest mt-2">OpenWeb Ninja Bridge Management</p>
+                  </div>
+                  <div className="flex bg-white p-1 rounded-2xl border border-slate-100 shadow-sm">
+                    {['overview', 'clients', 'logs', 'plans'].map(sub => (
+                      <button 
+                        key={sub}
+                        onClick={() => setAdminSubTab(sub)}
+                        className={`px-5 py-2 rounded-xl text-xs font-black uppercase transition-all ${adminSubTab === sub ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-indigo-600'}`}
+                      >
+                        {sub}
+                      </button>
+                    ))}
+                  </div>
+               </header>
+
+               {adminSubTab === 'overview' && (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                     <AdminStatCard label="API Engine" value="v3.2" icon={<Zap className="text-green-500" size={24}/>} sub="Global Core 100%" />
+                     <AdminStatCard label="Agency Nodes" value="1,492" icon={<Users className="text-indigo-600" size={24}/>} sub="Sub-Account Sync OK" />
+                     <AdminStatCard label="Credit Pool" value="42.8k" icon={<Database className="text-blue-500" size={24}/>} sub="/ 50k monthly" />
+                  </div>
+               )}
+
+               {adminSubTab === 'clients' && (
+                  <div className="bg-white rounded-[2.5rem] border border-slate-200 overflow-hidden shadow-sm animate-in fade-in">
+                    <div className="p-8 border-b border-slate-100 flex items-center justify-between">
+                       <h3 className="font-black text-slate-800 italic">Connected Sub-Accounts</h3>
+                       <div className="relative">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                          <input placeholder="Search clients..." className="pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none" />
+                       </div>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left">
+                        <thead>
+                          <tr className="bg-slate-50/50">
+                            <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Client / Sub-Account</th>
+                            <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Plan</th>
+                            <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Keywords</th>
+                            <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Reporting</th>
+                            <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Status</th>
+                            <th className="px-8 py-4"></th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {[
+                            { name: "Skyline SEO", plan: "Premium", kw: "24/25", reports: true, status: "Syncing" },
+                            { name: "Maryland Law Pros", plan: "Standard", kw: "10/12", reports: true, status: "Syncing" },
+                            { name: "Clockwork Pizza", plan: "Standard", kw: "11/12", reports: true, status: "Syncing" },
+                            { name: "Pet Groomers", plan: "Starter", kw: "4/5", reports: false, status: "Paused" },
+                            { name: "Elite Roofers", plan: "Premium", kw: "18/25", reports: true, status: "Syncing" },
+                          ].map((client, i) => (
+                            <tr key={i} className="hover:bg-slate-50/50 transition-colors group">
+                               <td className="px-8 py-5">
+                                  <p className="text-sm font-black text-slate-800">{client.name}</p>
+                                  <p className="text-[10px] font-bold text-slate-400">ID: ghl_a92b_{i}02</p>
+                               </td>
+                               <td className="px-8 py-5">
+                                  <span className={`px-3 py-1 rounded-full text-[10px] font-black ${client.plan === 'Premium' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-500'}`}>{client.plan}</span>
+                               </td>
+                               <td className="px-8 py-5 text-sm font-bold text-slate-600">{client.kw}</td>
+                               <td className="px-8 py-5">
+                                  <div className={`w-2.5 h-2.5 rounded-full ${client.reports ? 'bg-green-500 shadow-lg shadow-green-100' : 'bg-slate-200'}`}></div>
+                               </td>
+                               <td className="px-8 py-5">
+                                  <span className={`text-[10px] font-black ${client.status === 'Syncing' ? 'text-green-600' : 'text-orange-500'}`}>{client.status}</span>
+                               </td>
+                               <td className="px-8 py-5 text-right">
+                                  <button className="p-2 text-slate-300 hover:text-indigo-600 opacity-0 group-hover:opacity-100 transition-all"><MoreHorizontal size={18}/></button>
+                               </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+               )}
+
+               {adminSubTab === 'logs' && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8 animate-in fade-in">
+                     <div className="bg-white rounded-[2.5rem] border border-slate-200 overflow-hidden shadow-sm flex flex-col">
+                        <div className="p-8 border-b border-slate-100 flex items-center justify-between bg-slate-50/30">
+                           <div className="flex items-center gap-3">
+                              <div className="p-2 bg-blue-50 text-blue-600 rounded-xl"><ArrowRightLeft size={18}/></div>
+                              <h3 className="font-black text-slate-800 italic">Incoming Pipeline</h3>
+                           </div>
+                           <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest">GHL Webhooks</span>
+                        </div>
+                        <div className="p-6 space-y-3 flex-1 overflow-y-auto max-h-[500px] custom-scrollbar">
+                           {[1,2,3,4,5,6,7].map(i => (
+                             <div key={i} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 font-mono text-[10px] text-slate-500 group hover:border-blue-200 transition-colors">
+                                <div className="flex items-center justify-between mb-2">
+                                   <span className="text-green-600 font-bold tracking-tighter">[200 OK]</span>
+                                   <span className="text-slate-300 group-hover:text-blue-400">12:4{i} PM</span>
+                                </div>
+                                <span className="text-slate-800 font-bold">POST /webhook/ghl - tag_added</span>
+                                <p className="mt-1 opacity-60">Payload: {"{ contact_id: '921c...', tag: 'start_scan' }"}</p>
+                             </div>
+                           ))}
+                        </div>
+                     </div>
+                     <div className="bg-white rounded-[2.5rem] border border-slate-200 overflow-hidden shadow-sm flex flex-col">
+                        <div className="p-8 border-b border-slate-100 flex items-center justify-between bg-slate-50/30">
+                           <div className="flex items-center gap-3">
+                              <div className="p-2 bg-orange-50 text-orange-600 rounded-xl"><Activity size={18}/></div>
+                              <h3 className="font-black text-slate-800 italic">Outgoing Sync</h3>
+                           </div>
+                           <span className="text-[10px] font-black text-orange-600 uppercase tracking-widest">Field Push</span>
+                        </div>
+                        <div className="p-6 space-y-3 flex-1 overflow-y-auto max-h-[500px] custom-scrollbar">
+                           {[1,2,3,4,5,6,7].map(i => (
+                             <div key={i} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 font-mono text-[10px] text-slate-500 group hover:border-orange-200 transition-colors">
+                                <div className="flex items-center justify-between mb-2">
+                                   <span className="text-indigo-600 font-bold tracking-tighter">[SYNCED]</span>
+                                   <span className="text-slate-300 group-hover:text-orange-400">12:3{i} PM</span>
+                                </div>
+                                <span className="text-slate-800 font-bold">PUT /ghl/fields - avg_rank_update</span>
+                                <p className="mt-1 opacity-60">Success • {380 + i}ms latency</p>
+                             </div>
+                           ))}
+                        </div>
+                     </div>
+                  </div>
+               )}
+
+               {adminSubTab === 'plans' && (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8 animate-in fade-in">
+                    {[
+                      { name: "Starter", kws: 5, grid: false, price: "29", color: "bg-slate-50 text-slate-800" },
+                      { name: "Standard", kws: 12, grid: true, price: "79", color: "bg-indigo-600 text-white shadow-2xl scale-105" },
+                      { name: "Premium", kws: 25, grid: true, price: "149", color: "bg-slate-900 text-white" }
+                    ].map((plan) => (
+                      <div key={plan.name} className={`p-10 rounded-[3rem] border flex flex-col relative overflow-hidden transition-all hover:translate-y-[-5px] ${plan.color}`}>
+                         <h3 className="text-2xl font-black mb-8 italic uppercase tracking-tighter">{plan.name}</h3>
+                         <div className="mb-10 flex-1 space-y-4">
+                            <div className="flex items-center gap-3"><CheckCircle2 size={18} className="shrink-0" /><span className="text-sm font-bold tracking-tight">{plan.kws} Active Keywords</span></div>
+                            <div className="flex items-center gap-3 opacity-80">{plan.grid ? <CheckCircle2 size={18} className="shrink-0" /> : <X size={18} className="shrink-0 text-red-400" />}<span className="text-sm font-bold tracking-tight">Geo-Grid Maps</span></div>
+                            <div className="flex items-center gap-3 opacity-80"><CheckCircle2 size={18} className="shrink-0" /><span className="text-sm font-bold tracking-tight">Smart Reporting</span></div>
+                         </div>
+                         <div className="mb-8 pt-8 border-t border-white/10 flex items-end gap-1"><span className="text-4xl font-black tracking-tighter">${plan.price}</span><span className="text-xs font-bold opacity-60 pb-1">/mo</span></div>
+                         <button 
+                           onClick={() => setEditingPlan(plan)}
+                           className="w-full py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest bg-white text-slate-900 shadow-xl hover:bg-slate-50 transition-all"
+                         >
+                           Configure Tier
+                         </button>
+                      </div>
+                    ))}
+                  </div>
+               )}
+            </div>
+          </div>
+        )}
+      </main>
+
+      {/* Global CSS for scrollbars */}
+      <style>{`
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: #e2e8f0;
+          border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: #cbd5e1;
+        }
+      `}</style>
+    </div>
+  );
+};
+
+const AdminStatCard = ({ label, value, icon, sub }) => (
+  <div className="bg-white p-8 rounded-[3rem] border border-slate-200 shadow-sm transition-all hover:scale-[1.02]">
+    <div className="w-14 h-14 bg-slate-50 rounded-2xl flex items-center justify-center mb-6 border border-slate-100">
+      {icon}
+    </div>
+    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 leading-none">{label}</p>
+    <div className="flex items-baseline gap-2">
+      <span className="text-4xl font-black text-slate-900 leading-none">{value}</span>
+    </div>
+    <p className="text-[10px] text-slate-500 font-bold mt-2 italic tracking-tight">{sub}</p>
+  </div>
+);
+
+export default App;
