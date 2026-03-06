@@ -21,97 +21,71 @@ export default async function handler(
     });
   }
 
-  // Test with a simple example keyword and place_id
+  // Test with a simple example - Search Business Locations endpoint
   const testPayload = {
-    keyword: "pizza",
-    place_id: "ChIJOwg_06VPwokRYv534QaPC8g", // Example: Empire State Building
-    grid_size: 3 // Small grid for testing
+    query: "Jives Media",
+    near: "California, USA"
   };
 
   try {
     console.log("Testing OpenWeb Ninja API with key:", apiKey.substring(0, 10) + "...");
     
-    // Try Method 1: Bearer token
-    const bearerResponse = await fetch("https://www.openwebninja.com/api/local-rank-tracker", {
-      method: "POST",
+    // Use the correct authentication method from the dashboard screenshot: X-API-Key (uppercase)
+    const response = await fetch("https://api.openwebninja.com/local-rank-tracker/places", {
+      method: "GET",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey}`
-      },
-      body: JSON.stringify(testPayload)
+        "X-API-Key": apiKey,  // Correct format from OpenWeb Ninja dashboard
+        "Accept": "*/*"
+      }
     });
 
-    if (bearerResponse.ok) {
-      const data = await bearerResponse.json();
+    const responseText = await response.text();
+    console.log("API Response Status:", response.status);
+    console.log("API Response:", responseText.substring(0, 500));
+
+    if (response.ok) {
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch {
+        data = { raw: responseText };
+      }
+
       return res.status(200).json({
         success: true,
-        method: "Bearer Token",
+        method: "X-API-Key Header (Correct Format)",
         message: "✅ API connection successful!",
+        status_code: response.status,
         sample_data: data
       });
     }
 
-    // Try Method 2: x-api-key header
-    const apiKeyResponse = await fetch("https://www.openwebninja.com/api/local-rank-tracker", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey
-      },
-      body: JSON.stringify(testPayload)
-    });
-
-    if (apiKeyResponse.ok) {
-      const data = await apiKeyResponse.json();
-      return res.status(200).json({
-        success: true,
-        method: "x-api-key Header",
-        message: "✅ API connection successful!",
-        sample_data: data
-      });
-    }
-
-    // Try Method 3: API-Key header (another common variant)
-    const altKeyResponse = await fetch("https://www.openwebninja.com/api/local-rank-tracker", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "API-Key": apiKey
-      },
-      body: JSON.stringify(testPayload)
-    });
-
-    if (altKeyResponse.ok) {
-      const data = await altKeyResponse.json();
-      return res.status(200).json({
-        success: true,
-        method: "API-Key Header",
-        message: "✅ API connection successful!",
-        sample_data: data
-      });
-    }
-
-    // If all methods fail, return detailed error info
-    const errorText = await bearerResponse.text();
-    return res.status(bearerResponse.status).json({
+    // If failed, return detailed error info
+    return res.status(response.status).json({
       success: false,
-      error: "All authentication methods failed",
-      status_code: bearerResponse.status,
-      response_preview: errorText.substring(0, 500),
-      tested_methods: ["Bearer Token", "x-api-key", "API-Key"],
+      error: "API request failed",
+      status_code: response.status,
+      response_preview: responseText.substring(0, 500),
+      headers_used: {
+        "X-API-Key": "ak_vddtmp3ca0x6ims5oubp0sehd22i1a934ixqj60t3xfrhm1 (correct format)",
+        "Accept": "*/*"
+      },
       next_steps: [
-        "1. Check OpenWeb Ninja API documentation for correct auth method",
-        "2. Verify your API key is active and has sufficient credits",
-        "3. Check if your IP needs to be whitelisted"
+        "1. Verify your API key is active in OpenWeb Ninja dashboard",
+        "2. Check if you have sufficient API credits",
+        "3. Verify the endpoint URL matches the API documentation",
+        "4. Check if your IP needs to be whitelisted"
       ]
     });
 
   } catch (error) {
+    console.error("Network error:", error);
     return res.status(500).json({
       success: false,
       error: "Network error or invalid endpoint",
       details: error instanceof Error ? error.message : "Unknown error",
-      api_endpoint: "https://www.openwebninja.com/api/local-rank-tracker"
+      api_endpoint: "https://api.openwebninja.com/local-rank-tracker/places"
     });
   }
 }

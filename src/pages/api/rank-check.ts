@@ -5,13 +5,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
  * 
  * PURPOSE: This is where you call the OpenWeb Ninja API to get ranking data.
  * 
- * ⚠️ HOW TO ADD YOUR OPENWEBNINJA API KEY:
- * 
- * 1. Open your `.env.local` file in the project root
- * 2. Add this line:
- *    OPENWEBNINJA_API_KEY=your_actual_api_key_here
- * 
- * 3. The key will be available as process.env.OPENWEBNINJA_API_KEY
+ * Authentication: Uses X-API-Key header (uppercase) as per OpenWeb Ninja docs
  * 
  * EXAMPLE REQUEST FROM FRONTEND:
  * ```
@@ -88,12 +82,13 @@ export default async function handler(
   }
 
   try {
-    // Call OpenWeb Ninja API
-    const response = await fetch("https://www.openwebninja.com/api/local-rank-tracker", {
+    // Call OpenWeb Ninja API with correct authentication (X-API-Key header, uppercase)
+    const response = await fetch("https://api.openwebninja.com/local-rank-tracker", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey}` // Adjust this based on actual API auth method
+        "X-API-Key": apiKey,  // Correct format from OpenWeb Ninja
+        "Accept": "*/*"
       },
       body: JSON.stringify({
         keyword,
