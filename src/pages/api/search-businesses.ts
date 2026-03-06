@@ -87,14 +87,17 @@ export default async function handler(
     });
 
     console.log("Response Status:", response.status);
+    console.log("Response Headers:", Object.fromEntries(response.headers.entries()));
+
+    const responseText = await response.text();
+    console.log("Response Body:", responseText);
 
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error("❌ OpenWeb Ninja API error:", errorText);
+      console.error("❌ OpenWeb Ninja API error:", responseText);
       
       let errorMessage = `API request failed: ${response.statusText}`;
       try {
-        const errorData = JSON.parse(errorText);
+        const errorData = JSON.parse(responseText);
         errorMessage = errorData.message || errorData.error || errorMessage;
       } catch {
         // Keep default error message if response isn't JSON
@@ -103,12 +106,24 @@ export default async function handler(
       return res.status(response.status).json({
         success: false,
         error: errorMessage,
-        details: errorText
+        details: responseText
       });
     }
 
-    const data = await response.json();
-    console.log("✅ Success! Found businesses:", data.results?.length || 0);
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch (e) {
+      console.error("Failed to parse response as JSON:", e);
+      return res.status(500).json({
+        success: false,
+        error: "Invalid response format from API",
+        details: responseText
+      });
+    }
+
+    console.log("✅ Parsed data:", data);
+    console.log("Results count:", data.results?.length || 0);
 
     // Transform the response to match our expected format
     const results: BusinessResult[] = (data.results || []).map((item: any) => ({
