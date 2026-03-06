@@ -32,18 +32,24 @@ export function BusinessSelector({ currentBusiness, onSelectBusiness }: Business
   const onLoad = (autocompleteInstance: google.maps.places.Autocomplete) => {
     console.log("✅ Autocomplete loaded successfully");
     setAutocomplete(autocompleteInstance);
+    
+    // CRITICAL FIX: Add event listener directly to the autocomplete instance
+    autocompleteInstance.addListener("place_changed", () => {
+      console.log("🔔 place_changed event fired!");
+      handlePlaceSelection(autocompleteInstance);
+    });
   };
 
-  const onPlaceChanged = () => {
-    console.log("🔔 onPlaceChanged triggered");
+  const handlePlaceSelection = (autocompleteInstance: google.maps.places.Autocomplete) => {
+    console.log("🔔 handlePlaceSelection called");
     
-    if (!autocomplete) {
+    if (!autocompleteInstance) {
       console.error("❌ No autocomplete instance available");
       setError("Autocomplete not initialized");
       return;
     }
 
-    const place = autocomplete.getPlace();
+    const place = autocompleteInstance.getPlace();
     console.log("📍 Place object received:", place);
 
     // Validate we have minimum required data
@@ -166,7 +172,6 @@ export function BusinessSelector({ currentBusiness, onSelectBusiness }: Business
               </label>
               <Autocomplete
                 onLoad={onLoad}
-                onPlaceChanged={onPlaceChanged}
                 options={{
                   types: ["establishment"],
                   fields: ["place_id", "name", "formatted_address", "geometry", "vicinity"]
