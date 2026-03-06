@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { Search, MapPin, Building2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,25 +25,43 @@ export function BusinessSelector({ currentBusiness, onSelectBusiness }: Business
   const [autocomplete, setAutocomplete] = useState<google.maps.places.Autocomplete | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
 
   const onLoad = (autocompleteInstance: google.maps.places.Autocomplete) => {
-    console.log("Autocomplete loaded:", autocompleteInstance);
+    console.log("✅ Autocomplete loaded successfully");
     setAutocomplete(autocompleteInstance);
   };
 
   const onPlaceChanged = () => {
+    console.log("🔔 onPlaceChanged triggered");
+    
     if (!autocomplete) {
-      console.log("No autocomplete instance");
+      console.error("❌ No autocomplete instance available");
+      setError("Autocomplete not initialized");
       return;
     }
 
     const place = autocomplete.getPlace();
-    console.log("Place selected:", place);
+    console.log("📍 Place object received:", place);
 
-    if (!place.place_id || !place.name || !place.formatted_address) {
-      setError("Please select a valid business from the dropdown");
+    // Validate we have minimum required data
+    if (!place) {
+      console.error("❌ No place data returned");
+      setError("No place selected. Please choose from the dropdown.");
+      return;
+    }
+
+    if (!place.place_id) {
+      console.error("❌ Missing place_id");
+      setError("Invalid place selected. Please choose a business from the dropdown.");
+      return;
+    }
+
+    if (!place.name) {
+      console.error("❌ Missing name");
+      setError("Invalid place selected. Please choose a business from the dropdown.");
       return;
     }
 
@@ -51,24 +69,19 @@ export function BusinessSelector({ currentBusiness, onSelectBusiness }: Business
     const lng = place.geometry?.location?.lng();
 
     if (!lat || !lng) {
-      setError("Could not determine business location");
+      console.error("❌ Missing coordinates:", { lat, lng });
+      setError("Could not determine business location. Try selecting a different business.");
       return;
     }
 
-    console.log("Creating business object:", {
-      name: place.name,
-      address: place.formatted_address,
-      place_id: place.place_id,
-      lat,
-      lng
-    });
+    console.log("✅ All validations passed. Creating business object...");
 
     const business: Business = {
       id: place.place_id,
       user_id: "current_user",
       ghl_subaccount_id: null,
       name: place.name,
-      address: place.formatted_address,
+      address: place.formatted_address || place.vicinity || "Address not available",
       place_id: place.place_id,
       subscription_tier: "Standard",
       reporting_enabled: true,
@@ -76,10 +89,19 @@ export function BusinessSelector({ currentBusiness, onSelectBusiness }: Business
       updated_at: new Date().toISOString()
     };
 
-    console.log("Calling onSelectBusiness with:", business);
+    console.log("✅ Business created:", business);
+    console.log("🚀 Calling onSelectBusiness...");
+    
     onSelectBusiness(business);
     setIsOpen(false);
     setError(null);
+    
+    // Clear the input
+    if (inputRef.current) {
+      inputRef.current.value = "";
+    }
+
+    console.log("✅ Selection complete!");
   };
 
   if (!apiKey) {
@@ -132,7 +154,7 @@ export function BusinessSelector({ currentBusiness, onSelectBusiness }: Business
             Search Business Location
           </DialogTitle>
           <DialogDescription>
-            Search for your business on Google to get accurate ranking data
+            Start typing your business name and select it from the dropdown
           </DialogDescription>
         </DialogHeader>
 
@@ -147,16 +169,23 @@ export function BusinessSelector({ currentBusiness, onSelectBusiness }: Business
                 onPlaceChanged={onPlaceChanged}
                 options={{
                   types: ["establishment"],
-                  fields: ["place_id", "name", "formatted_address", "geometry"]
+                  fields: ["place_id", "name", "formatted_address", "geometry", "vicinity"]
                 }}
               >
                 <Input
-                  placeholder="Start typing business name or address..."
+                  ref={inputRef}
+                  placeholder="Start typing business name (e.g., Starbucks Phoenix)..."
                   className="h-11"
+                  onKeyDown={(e) => {
+                    // Prevent form submission on Enter
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                    }
+                  }}
                 />
               </Autocomplete>
               <p className="text-xs text-slate-500 mt-2">
-                💡 Start typing and select from the dropdown suggestions
+                💡 Type your business name and location, then select from dropdown
               </p>
             </div>
 
@@ -176,6 +205,9 @@ export function BusinessSelector({ currentBusiness, onSelectBusiness }: Business
                     </h4>
                     <p className="text-xs text-green-700 mt-1">
                       {currentBusiness.address}
+                    </p>
+                    <p className="text-xs text-green-600 mt-2">
+                      Place ID: {currentBusiness.place_id}
                     </p>
                   </div>
                 </div>
