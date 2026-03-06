@@ -11,7 +11,6 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import type { Business } from "@/types";
-import { Loader } from "@googlemaps/js-api-loader";
 
 interface BusinessSelectorProps {
   currentBusiness: Business | null;
@@ -24,36 +23,55 @@ export function BusinessSelector({ currentBusiness, onSelectBusiness }: Business
   const [isLoading, setIsLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
-  const loaderRef = useRef<Loader | null>(null);
 
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
 
-  // Initialize Google Maps loader once
-  useEffect(() => {
-    if (!apiKey) return;
-
-    loaderRef.current = new Loader({
-      apiKey,
-      version: "weekly",
-      libraries: ["places"]
-    });
-  }, [apiKey]);
-
   // Load autocomplete when dialog opens
   useEffect(() => {
-    if (!isOpen || !inputRef.current || !loaderRef.current) return;
+    if (!isOpen || !inputRef.current || !apiKey) return;
 
-    console.log("🔧 Dialog opened, initializing autocomplete...");
+    console.log("🔧 Dialog opened, loading Google Maps...");
     setIsLoading(true);
 
-    // Use the load() method which is the standard API
-    (loaderRef.current as any).load()
-      .then(() => {
-        console.log("✅ Google Maps loaded successfully");
-        
-        if (!inputRef.current) {
-          console.error("❌ Input ref lost during load");
-          return;
+    // Load Google Maps script dynamically
+    const loadGoogleMaps = async () => {
+      // Check if script is already loaded
+      if (window.google && window.google.maps && window.google.maps.places) {
+        console.log("✅ Google Maps already loaded, creating autocomplete...");
+        initAutocomplete();
+        return;
+      }
+
+      // Load the script
+      const script = document.createElement("script");
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&loading=async`;
+      script.async = true;
+      script.defer = true;
+
+      script.onload = () => {
+        console.log("✅ Google Maps script loaded successfully");
+        initAutocomplete();
+      };
+
+      script.onerror = () => {
+        console.error("❌ Failed to load Google Maps script");
+        setError("Failed to load Google Maps. Please check your API key.");
+        setIsLoading(false);
+      };
+
+      document.head.appendChild(script);
+    };
+
+    const initAutocomplete = () => {
+      if (!inputRef.current) {
+        console.error("❌ Input ref is null");
+        return;
+      }
+
+      try {
+        // Clean up old instance if exists
+        if (autocompleteRef.current) {
+          google.maps.event.clearInstanceListeners(autocompleteRef.current);
         }
 
         // Create new autocomplete instance
@@ -74,21 +92,26 @@ export function BusinessSelector({ currentBusiness, onSelectBusiness }: Business
         autocompleteRef.current = autocomplete;
         setIsLoading(false);
         console.log("✅ Autocomplete ready for input");
-      })
-      .catch((error) => {
-        console.error("❌ Failed to load Google Maps:", error);
-        setError("Failed to load Google Maps. Please try again.");
+      } catch (err) {
+        console.error("❌ Error creating autocomplete:", err);
+        setError("Failed to initialize autocomplete. Please try again.");
         setIsLoading(false);
-      });
+      }
+    };
 
-    // Cleanup
+    loadGoogleMaps();
+
+    // Cleanup on dialog close
     return () => {
       if (autocompleteRef.current) {
         google.maps.event.clearInstanceListeners(autocompleteRef.current);
         autocompleteRef.current = null;
       }
+      if (inputRef.current) {
+        inputRef.current.value = "";
+      }
     };
-  }, [isOpen]);
+  }, [isOpen, apiKey]);
 
   const handlePlaceSelected = (place: google.maps.places.PlaceResult) => {
     console.log("📍 Place received:", place);
@@ -128,17 +151,12 @@ export function BusinessSelector({ currentBusiness, onSelectBusiness }: Business
     setIsOpen(false);
     setError(null);
 
-    // Clear input
-    if (inputRef.current) {
-      inputRef.current.value = "";
-    }
-
     console.log("✅ Selection complete!");
   };
 
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("📝 Form submitted (Enter pressed)");
+    console.log("📝 Form submitted");
     // The autocomplete listener will handle the actual selection
   };
 
