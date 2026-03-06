@@ -10,79 +10,53 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { LoadScript, Autocomplete } from "@react-google-maps/api";
 import type { Business } from "@/types";
+
+const libraries: ("places")[] = ["places"];
 
 interface BusinessSelectorProps {
   currentBusiness: Business | null;
   onSelectBusiness: (business: Business) => void;
 }
 
-interface SearchResult {
-  place_id: string;
-  name: string;
-  formatted_address: string;
-  geometry?: {
-    location: {
-      lat: number;
-      lng: number;
-    };
-  };
-}
-
 export function BusinessSelector({ currentBusiness, onSelectBusiness }: BusinessSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchLocation, setSearchLocation] = useState("");
-  const [isSearching, setIsSearching] = useState(false);
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [autocomplete, setAutocomplete] = useState<google.maps.places.Autocomplete | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSearch = async () => {
-    if (!searchQuery.trim() || !searchLocation.trim()) {
-      setError("Please enter both business name and location");
+  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+
+  const onLoad = (autocompleteInstance: google.maps.places.Autocomplete) => {
+    setAutocomplete(autocompleteInstance);
+  };
+
+  const onPlaceChanged = () => {
+    if (!autocomplete) return;
+
+    const place = autocomplete.getPlace();
+
+    if (!place.place_id || !place.name || !place.formatted_address) {
+      setError("Please select a valid business from the dropdown");
       return;
     }
 
-    setIsSearching(true);
-    setError(null);
+    const lat = place.geometry?.location?.lat();
+    const lng = place.geometry?.location?.lng();
 
-    try {
-      // Call OpenWeb Ninja's Search Business Locations endpoint
-      const response = await fetch("/api/search-businesses", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          query: searchQuery,
-          near: searchLocation
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to search businesses");
-      }
-
-      const data = await response.json();
-      setSearchResults(data.results || []);
-
-      if (data.results.length === 0) {
-        setError("No businesses found. Try a different search.");
-      }
-    } catch (err) {
-      console.error("Search error:", err);
-      setError("Failed to search. Please try again.");
-    } finally {
-      setIsSearching(false);
+    if (!lat || !lng) {
+      setError("Could not determine business location");
+      return;
     }
-  };
 
-  const handleSelectBusiness = (result: SearchResult) => {
     const business: Business = {
-      id: result.place_id,
-      user_id: "current_user", // Will be replaced with real user ID when auth is added
+      id: place.place_id,
+      user_id: "current_user",
       ghl_subaccount_id: null,
-      name: result.name,
-      address: result.formatted_address,
-      place_id: result.place_id,
+      name: place.name,
+      address: place.formatted_address,
+      place_id: place.place_id,
       subscription_tier: "Standard",
       reporting_enabled: true,
       created_at: new Date().toISOString(),
@@ -91,10 +65,21 @@ export function BusinessSelector({ currentBusiness, onSelectBusiness }: Business
 
     onSelectBusiness(business);
     setIsOpen(false);
-    setSearchQuery("");
-    setSearchLocation("");
-    setSearchResults([]);
+    setError(null);
   };
+
+  if (!apiKey) {
+    return (
+      <div className="px-2 py-4 text-center">
+        <p className="text-xs text-red-600 font-bold">
+          ⚠️ Google Maps API key not configured
+        </p>
+        <p className="text-[10px] text-slate-400 mt-1">
+          Add NEXT_PUBLIC_GOOGLE_MAPS_API_KEY to .env.local
+        </p>
+      </div>
+    );
+  }
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -137,87 +122,53 @@ export function BusinessSelector({ currentBusiness, onSelectBusiness }: Business
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
-          {/* Search Inputs */}
-          <div className="space-y-3">
+        <LoadScript googleMapsApiKey={apiKey} libraries={libraries}>
+          <div className="space-y-4">
             <div>
               <label className="text-xs font-bold text-slate-600 mb-1.5 block">
-                Business Name
+                Business Name and Location
               </label>
-              <Input
-                placeholder="e.g., Clockwork Pizza"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                className="h-11"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-bold text-slate-600 mb-1.5 block">
-                Location
-              </label>
-              <Input
-                placeholder="e.g., Tempe, AZ or 85283"
-                value={searchLocation}
-                onChange={(e) => setSearchLocation(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                className="h-11"
-              />
-            </div>
-            <Button
-              onClick={handleSearch}
-              disabled={isSearching}
-              className="w-full h-11 bg-indigo-600 hover:bg-indigo-700"
-            >
-              {isSearching ? (
-                <>
-                  <Loader2 size={16} className="animate-spin mr-2" />
-                  Searching...
-                </>
-              ) : (
-                <>
-                  <Search size={16} className="mr-2" />
-                  Search Businesses
-                </>
-              )}
-            </Button>
-          </div>
-
-          {/* Error Message */}
-          {error && (
-            <div className="bg-red-50 border border-red-200 rounded-xl p-4">
-              <p className="text-sm text-red-700">{error}</p>
-            </div>
-          )}
-
-          {/* Search Results */}
-          {searchResults.length > 0 && (
-            <div className="space-y-2 max-h-96 overflow-y-auto">
-              <p className="text-xs font-bold text-slate-600 uppercase tracking-wider">
-                Found {searchResults.length} business{searchResults.length !== 1 ? "es" : ""}
+              <Autocomplete
+                onLoad={onLoad}
+                onPlaceChanged={onPlaceChanged}
+                options={{
+                  types: ["establishment"],
+                  fields: ["place_id", "name", "formatted_address", "geometry"]
+                }}
+              >
+                <Input
+                  placeholder="Start typing business name or address..."
+                  className="h-11"
+                />
+              </Autocomplete>
+              <p className="text-xs text-slate-500 mt-2">
+                💡 Start typing and select from the dropdown suggestions
               </p>
-              {searchResults.map((result) => (
-                <button
-                  key={result.place_id}
-                  onClick={() => handleSelectBusiness(result)}
-                  className="w-full text-left p-4 rounded-xl border border-slate-200 hover:bg-indigo-50 hover:border-indigo-200 transition-all group"
-                >
-                  <div className="flex items-start gap-3">
-                    <MapPin size={16} className="text-indigo-600 mt-1 shrink-0" />
-                    <div className="flex-1 overflow-hidden">
-                      <h4 className="font-bold text-sm text-slate-900 truncate group-hover:text-indigo-600">
-                        {result.name}
-                      </h4>
-                      <p className="text-xs text-slate-500 mt-1 truncate">
-                        {result.formatted_address}
-                      </p>
-                    </div>
-                  </div>
-                </button>
-              ))}
             </div>
-          )}
-        </div>
+
+            {error && (
+              <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+                <p className="text-sm text-red-700">{error}</p>
+              </div>
+            )}
+
+            {currentBusiness && (
+              <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+                <div className="flex items-start gap-3">
+                  <MapPin size={16} className="text-green-600 mt-1 shrink-0" />
+                  <div>
+                    <h4 className="font-bold text-sm text-green-900">
+                      ✅ Current Selection: {currentBusiness.name}
+                    </h4>
+                    <p className="text-xs text-green-700 mt-1">
+                      {currentBusiness.address}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </LoadScript>
       </DialogContent>
     </Dialog>
   );
