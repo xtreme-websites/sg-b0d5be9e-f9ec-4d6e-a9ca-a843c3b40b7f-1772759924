@@ -101,11 +101,16 @@ export function BusinessSelector({ currentBusiness, onSelectBusiness }: Business
 
       console.log("✅ Autocomplete instance created");
 
-      // CRITICAL: Add place_changed listener
+      // Add place_changed listener
       google.maps.event.addListener(autocomplete, "place_changed", () => {
         console.log("🔔 place_changed event fired!");
+        console.log("📝 Setting placeSelectedRef to true");
         placeSelectedRef.current = true;
-        handlePlaceSelection(autocomplete);
+        
+        // Add a tiny delay to ensure the place object is fully populated
+        setTimeout(() => {
+          handlePlaceSelection(autocomplete);
+        }, 50);
       });
 
       autocompleteRef.current = autocomplete;
@@ -123,14 +128,8 @@ export function BusinessSelector({ currentBusiness, onSelectBusiness }: Business
     console.log("📍 Place object received:", place);
 
     // Validate we have minimum required data
-    if (!place) {
-      console.error("❌ No place data returned");
-      setError("No place selected. Please choose from the dropdown.");
-      return;
-    }
-
-    if (!place.place_id) {
-      console.error("❌ Missing place_id");
+    if (!place || !place.place_id) {
+      console.error("❌ Invalid place data:", place);
       setError("Invalid place selected. Please choose a business from the dropdown.");
       return;
     }
@@ -244,7 +243,7 @@ export function BusinessSelector({ currentBusiness, onSelectBusiness }: Business
             Search Business Location
           </DialogTitle>
           <DialogDescription>
-            Start typing your business name and select it from the dropdown
+            Start typing your business name and location, then select from the dropdown
           </DialogDescription>
         </DialogHeader>
 
@@ -260,7 +259,11 @@ export function BusinessSelector({ currentBusiness, onSelectBusiness }: Business
               autoComplete="off"
             />
             <p className="text-xs text-slate-500 mt-2">
-              💡 Type your business name and location, then **click** on a suggestion from the dropdown
+              💡 Type your business name and location, then select from the dropdown using:
+              <br />
+              • <strong>Mouse:</strong> Click on a suggestion
+              <br />
+              • <strong>Keyboard:</strong> Use arrow keys to navigate, then press Enter
             </p>
           </div>
 
