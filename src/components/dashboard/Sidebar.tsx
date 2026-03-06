@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import type { Keyword, Business } from "@/types";
 import { cn } from "@/lib/utils";
+import { BusinessSelector } from "@/components/dashboard/BusinessSelector";
 
 interface SidebarProps {
   collapsed: boolean;
@@ -17,6 +18,8 @@ interface SidebarProps {
   selectedKeywordId?: string | null;
   onSelectKeyword: (id: string) => void;
   businessName: string;
+  currentBusiness: Business | null;
+  onSelectBusiness: (business: Business) => void;
 }
 
 export function Sidebar({
@@ -28,7 +31,9 @@ export function Sidebar({
   onAddKeyword,
   selectedKeywordId,
   onSelectKeyword,
-  businessName
+  businessName,
+  currentBusiness,
+  onSelectBusiness
 }: SidebarProps) {
   const [newKeywordInput, setNewKeywordInput] = useState("");
 
@@ -70,9 +75,11 @@ export function Sidebar({
 
         {/* Business Context */}
         {!collapsed && (
-          <div className="px-3 mb-6">
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Current Business</p>
-            <div className="font-bold text-slate-800 text-sm truncate">{businessName}</div>
+          <div className="px-2 mb-6">
+            <BusinessSelector 
+              currentBusiness={currentBusiness}
+              onSelectBusiness={onSelectBusiness}
+            />
           </div>
         )}
 

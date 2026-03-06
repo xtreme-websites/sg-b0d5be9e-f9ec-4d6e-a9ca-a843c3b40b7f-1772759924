@@ -129,6 +129,16 @@ export default function Dashboard() {
     // For demo, we just keep the mock snapshot
   };
 
+  const handleSelectBusiness = (business: Business) => {
+    setCurrentBusiness(business);
+    setBusinesses(prev => {
+      const exists = prev.find(b => b.id === business.id);
+      if (exists) return prev;
+      return [...prev, business];
+    });
+    // In production, you would also save this to Supabase here
+  };
+
   const selectedPointData = selectedPointIndex !== null && currentSnapshot
     ? currentSnapshot.points[selectedPointIndex]
     : null;
@@ -151,6 +161,8 @@ export default function Dashboard() {
         selectedKeywordId={selectedKeywordId}
         onSelectKeyword={handleSelectKeyword}
         businessName={currentBusiness?.name || "Loading..."}
+        currentBusiness={currentBusiness}
+        onSelectBusiness={handleSelectBusiness}
       />
 
       {/* Main Content Area */}
