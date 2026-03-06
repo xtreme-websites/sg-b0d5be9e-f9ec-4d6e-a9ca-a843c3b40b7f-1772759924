@@ -47,9 +47,9 @@ export function BusinessSelector({ currentBusiness, onSelectBusiness }: Business
     setIsLoading(true);
 
     loaderRef.current
-      .load()
-      .then((google) => {
-        console.log("✅ Google Maps loaded successfully");
+      .importLibrary("places")
+      .then(() => {
+        console.log("✅ Google Maps Places library loaded successfully");
         
         if (!inputRef.current) {
           console.error("❌ Input ref lost during load");
