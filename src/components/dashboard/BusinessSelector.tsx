@@ -17,6 +17,42 @@ interface BusinessSelectorProps {
   onSelectBusiness: (business: Business) => void;
 }
 
+// Global flag to track if script is loaded
+let isGoogleMapsLoaded = false;
+let loadingPromise: Promise<void> | null = null;
+
+function loadGoogleMapsScript(apiKey: string): Promise<void> {
+  if (isGoogleMapsLoaded) {
+    return Promise.resolve();
+  }
+
+  if (loadingPromise) {
+    return loadingPromise;
+  }
+
+  loadingPromise = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
+    script.async = true;
+    script.defer = true;
+    
+    script.onload = () => {
+      isGoogleMapsLoaded = true;
+      console.log("✅ Google Maps script loaded");
+      resolve();
+    };
+    
+    script.onerror = () => {
+      loadingPromise = null;
+      reject(new Error("Failed to load Google Maps"));
+    };
+    
+    document.head.appendChild(script);
+  });
+
+  return loadingPromise;
+}
+
 export function BusinessSelector({ currentBusiness, onSelectBusiness }: BusinessSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -26,139 +62,100 @@ export function BusinessSelector({ currentBusiness, onSelectBusiness }: Business
 
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
 
-  // Load autocomplete when dialog opens
   useEffect(() => {
     if (!isOpen || !inputRef.current || !apiKey) return;
 
-    console.log("🔧 Dialog opened, loading Google Maps...");
+    console.log("🔧 Dialog opened, initializing autocomplete...");
     setIsLoading(true);
-
-    // Load Google Maps script dynamically
-    const loadGoogleMaps = async () => {
-      // Check if script is already loaded
-      if (window.google && window.google.maps && window.google.maps.places) {
-        console.log("✅ Google Maps already loaded, creating autocomplete...");
-        initAutocomplete();
-        return;
-      }
-
-      // Load the script
-      const script = document.createElement("script");
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&loading=async`;
-      script.async = true;
-      script.defer = true;
-
-      script.onload = () => {
-        console.log("✅ Google Maps script loaded successfully");
-        initAutocomplete();
-      };
-
-      script.onerror = () => {
-        console.error("❌ Failed to load Google Maps script");
-        setError("Failed to load Google Maps. Please check your API key.");
-        setIsLoading(false);
-      };
-
-      document.head.appendChild(script);
-    };
+    setError(null);
 
     const initAutocomplete = () => {
-      if (!inputRef.current) {
-        console.error("❌ Input ref is null");
-        return;
-      }
+      if (!inputRef.current) return;
 
       try {
-        // Clean up old instance if exists
+        // Clean up old instance
         if (autocompleteRef.current) {
           google.maps.event.clearInstanceListeners(autocompleteRef.current);
+          autocompleteRef.current = null;
         }
 
-        // Create new autocomplete instance
+        // Create new autocomplete
         const autocomplete = new google.maps.places.Autocomplete(inputRef.current, {
           types: ["establishment"],
           fields: ["place_id", "name", "formatted_address", "geometry", "vicinity"]
         });
 
-        console.log("✅ Autocomplete instance created");
-
-        // Add listener for place selection
+        // Add listener
         autocomplete.addListener("place_changed", () => {
           console.log("🔔 place_changed event fired!");
           const place = autocomplete.getPlace();
-          handlePlaceSelected(place);
+          
+          if (!place || !place.place_id) {
+            console.log("❌ Invalid place object");
+            setError("Please select a business from the dropdown suggestions");
+            return;
+          }
+
+          console.log("📍 Valid place:", place.name);
+          
+          const lat = place.geometry?.location?.lat();
+          const lng = place.geometry?.location?.lng();
+
+          if (!lat || !lng) {
+            setError("Could not get location coordinates");
+            return;
+          }
+
+          const business: Business = {
+            id: place.place_id,
+            user_id: "current_user",
+            ghl_subaccount_id: null,
+            name: place.name!,
+            address: place.formatted_address || place.vicinity || "Address not available",
+            place_id: place.place_id,
+            subscription_tier: "Standard",
+            reporting_enabled: true,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          };
+
+          console.log("✅ Business created, calling onSelectBusiness");
+          onSelectBusiness(business);
+          setIsOpen(false);
+          setError(null);
         });
 
         autocompleteRef.current = autocomplete;
         setIsLoading(false);
-        console.log("✅ Autocomplete ready for input");
+        console.log("✅ Autocomplete initialized");
       } catch (err) {
         console.error("❌ Error creating autocomplete:", err);
-        setError("Failed to initialize autocomplete. Please try again.");
+        setError("Failed to initialize search. Please try again.");
         setIsLoading(false);
       }
     };
 
-    loadGoogleMaps();
+    // Load script and init
+    loadGoogleMapsScript(apiKey)
+      .then(() => {
+        initAutocomplete();
+      })
+      .catch((err) => {
+        console.error("❌ Failed to load Google Maps:", err);
+        setError("Failed to load Google Maps. Please refresh the page.");
+        setIsLoading(false);
+      });
 
-    // Cleanup on dialog close
+    // Cleanup
     return () => {
       if (autocompleteRef.current) {
         google.maps.event.clearInstanceListeners(autocompleteRef.current);
-        autocompleteRef.current = null;
       }
       if (inputRef.current) {
         inputRef.current.value = "";
       }
     };
-  }, [isOpen, apiKey]);
-
-  const handlePlaceSelected = (place: google.maps.places.PlaceResult) => {
-    console.log("📍 Place received:", place);
-
-    if (!place || !place.place_id || !place.name) {
-      console.error("❌ Invalid place data");
-      setError("Invalid place selected. Please choose a business from the dropdown.");
-      return;
-    }
-
-    const lat = place.geometry?.location?.lat();
-    const lng = place.geometry?.location?.lng();
-
-    if (!lat || !lng) {
-      console.error("❌ Missing coordinates");
-      setError("Could not determine business location. Try selecting a different business.");
-      return;
-    }
-
-    console.log("✅ Valid place data, creating business...");
-
-    const business: Business = {
-      id: place.place_id,
-      user_id: "current_user",
-      ghl_subaccount_id: null,
-      name: place.name,
-      address: place.formatted_address || place.vicinity || "Address not available",
-      place_id: place.place_id,
-      subscription_tier: "Standard",
-      reporting_enabled: true,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    };
-
-    console.log("✅ Business created:", business);
-    onSelectBusiness(business);
-    setIsOpen(false);
-    setError(null);
-
-    console.log("✅ Selection complete!");
-  };
-
-  const handleFormSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    console.log("📝 Form submitted");
-    // The autocomplete listener will handle the actual selection
-  };
+  }, [isOpen, apiKey, onSelectBusiness]);
 
   if (!apiKey) {
     return (
@@ -214,30 +211,26 @@ export function BusinessSelector({ currentBusiness, onSelectBusiness }: Business
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleFormSubmit} className="space-y-4">
+        <div className="space-y-4">
           <div>
             <label className="text-xs font-bold text-slate-600 mb-1.5 block">
               Business Name and Location
             </label>
             <Input
               ref={inputRef}
-              placeholder="Start typing business name (e.g., Starbucks Phoenix)..."
+              placeholder="e.g., Starbucks Phoenix Arizona"
               className="h-11"
               autoComplete="off"
               disabled={isLoading}
             />
             {isLoading && (
               <p className="text-xs text-slate-500 mt-2">
-                🔄 Loading Google Maps...
+                🔄 Loading autocomplete...
               </p>
             )}
             {!isLoading && (
               <p className="text-xs text-slate-500 mt-2">
-                💡 Type your business name and location, then select from the dropdown using:
-                <br />
-                • <strong>Mouse:</strong> Click on a suggestion
-                <br />
-                • <strong>Keyboard:</strong> Use arrow keys to navigate, then press Enter
+                💡 Type to see suggestions, then click on one to select
               </p>
             )}
           </div>
@@ -254,19 +247,16 @@ export function BusinessSelector({ currentBusiness, onSelectBusiness }: Business
                 <MapPin size={16} className="text-green-600 mt-1 shrink-0" />
                 <div>
                   <h4 className="font-bold text-sm text-green-900">
-                    ✅ Current Selection: {currentBusiness.name}
+                    ✅ Current: {currentBusiness.name}
                   </h4>
                   <p className="text-xs text-green-700 mt-1">
                     {currentBusiness.address}
-                  </p>
-                  <p className="text-xs text-green-600 mt-2">
-                    Place ID: {currentBusiness.place_id}
                   </p>
                 </div>
               </div>
             </div>
           )}
-        </form>
+        </div>
       </DialogContent>
     </Dialog>
   );
