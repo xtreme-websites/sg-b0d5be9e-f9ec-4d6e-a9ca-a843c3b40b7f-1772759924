@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { Search, MapPin, Building2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,10 +10,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { LoadScript, Autocomplete } from "@react-google-maps/api";
 import type { Business } from "@/types";
-
-const libraries: ("places")[] = ["places"];
 
 interface BusinessSelectorProps {
   currentBusiness: Business | null;
@@ -22,34 +19,84 @@ interface BusinessSelectorProps {
 
 export function BusinessSelector({ currentBusiness, onSelectBusiness }: BusinessSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [autocomplete, setAutocomplete] = useState<google.maps.places.Autocomplete | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
 
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
 
-  const onLoad = (autocompleteInstance: google.maps.places.Autocomplete) => {
-    console.log("✅ Autocomplete loaded successfully");
-    setAutocomplete(autocompleteInstance);
-    
-    // CRITICAL FIX: Add event listener directly to the autocomplete instance
-    autocompleteInstance.addListener("place_changed", () => {
-      console.log("🔔 place_changed event fired!");
-      handlePlaceSelection(autocompleteInstance);
-    });
-  };
+  // Load Google Maps Script manually
+  useEffect(() => {
+    if (!apiKey || !isOpen) return;
 
-  const handlePlaceSelection = (autocompleteInstance: google.maps.places.Autocomplete) => {
-    console.log("🔔 handlePlaceSelection called");
-    
-    if (!autocompleteInstance) {
-      console.error("❌ No autocomplete instance available");
-      setError("Autocomplete not initialized");
+    console.log("🔧 Dialog opened, checking for Google Maps API...");
+
+    // Check if Google Maps is already loaded
+    if (window.google?.maps?.places) {
+      console.log("✅ Google Maps API already loaded");
+      initializeAutocomplete();
       return;
     }
 
-    const place = autocompleteInstance.getPlace();
+    console.log("📥 Loading Google Maps API...");
+
+    // Create script tag
+    const script = document.createElement("script");
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
+    script.async = true;
+    script.defer = true;
+    
+    script.onload = () => {
+      console.log("✅ Google Maps API loaded successfully");
+      initializeAutocomplete();
+    };
+
+    script.onerror = () => {
+      console.error("❌ Failed to load Google Maps API");
+      setError("Failed to load Google Maps. Please check your API key.");
+    };
+
+    document.head.appendChild(script);
+
+    return () => {
+      // Cleanup autocomplete listener when dialog closes
+      if (autocompleteRef.current) {
+        google.maps.event.clearInstanceListeners(autocompleteRef.current);
+      }
+    };
+  }, [isOpen, apiKey]);
+
+  const initializeAutocomplete = () => {
+    if (!inputRef.current) {
+      console.error("❌ Input ref not available");
+      return;
+    }
+
+    console.log("🔧 Initializing autocomplete on input...");
+
+    // Create autocomplete instance
+    const autocomplete = new google.maps.places.Autocomplete(inputRef.current, {
+      types: ["establishment"],
+      fields: ["place_id", "name", "formatted_address", "geometry", "vicinity"]
+    });
+
+    console.log("✅ Autocomplete instance created");
+
+    // Add place_changed listener
+    autocomplete.addListener("place_changed", () => {
+      console.log("🔔 place_changed event fired!");
+      handlePlaceSelection(autocomplete);
+    });
+
+    autocompleteRef.current = autocomplete;
+    console.log("✅ Event listener attached successfully");
+  };
+
+  const handlePlaceSelection = (autocomplete: google.maps.places.Autocomplete) => {
+    console.log("🔔 handlePlaceSelection called");
+    
+    const place = autocomplete.getPlace();
     console.log("📍 Place object received:", place);
 
     // Validate we have minimum required data
@@ -164,62 +211,52 @@ export function BusinessSelector({ currentBusiness, onSelectBusiness }: Business
           </DialogDescription>
         </DialogHeader>
 
-        <LoadScript googleMapsApiKey={apiKey} libraries={libraries}>
-          <div className="space-y-4">
-            <div>
-              <label className="text-xs font-bold text-slate-600 mb-1.5 block">
-                Business Name and Location
-              </label>
-              <Autocomplete
-                onLoad={onLoad}
-                options={{
-                  types: ["establishment"],
-                  fields: ["place_id", "name", "formatted_address", "geometry", "vicinity"]
-                }}
-              >
-                <Input
-                  ref={inputRef}
-                  placeholder="Start typing business name (e.g., Starbucks Phoenix)..."
-                  className="h-11"
-                  onKeyDown={(e) => {
-                    // Prevent form submission on Enter
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                    }
-                  }}
-                />
-              </Autocomplete>
-              <p className="text-xs text-slate-500 mt-2">
-                💡 Type your business name and location, then select from dropdown
-              </p>
+        <div className="space-y-4">
+          <div>
+            <label className="text-xs font-bold text-slate-600 mb-1.5 block">
+              Business Name and Location
+            </label>
+            <Input
+              ref={inputRef}
+              placeholder="Start typing business name (e.g., Starbucks Phoenix)..."
+              className="h-11"
+              onKeyDown={(e) => {
+                // Prevent form submission on Enter
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                }
+              }}
+            />
+            <p className="text-xs text-slate-500 mt-2">
+              💡 Type your business name and location, then select from dropdown
+            </p>
+          </div>
+
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+              <p className="text-sm text-red-700">{error}</p>
             </div>
+          )}
 
-            {error && (
-              <div className="bg-red-50 border border-red-200 rounded-xl p-4">
-                <p className="text-sm text-red-700">{error}</p>
-              </div>
-            )}
-
-            {currentBusiness && (
-              <div className="bg-green-50 border border-green-200 rounded-xl p-4">
-                <div className="flex items-start gap-3">
-                  <MapPin size={16} className="text-green-600 mt-1 shrink-0" />
-                  <div>
-                    <h4 className="font-bold text-sm text-green-900">
-                      ✅ Current Selection: {currentBusiness.name}
-                    </h4>
-                    <p className="text-xs text-green-700 mt-1">
-                      {currentBusiness.address}
-                    </p>
-                    <p className="text-xs text-green-600 mt-2">
-                      Place ID: {currentBusiness.place_id}
-                    </p>
-                  </div>
+          {currentBusiness && (
+            <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+              <div className="flex items-start gap-3">
+                <MapPin size={16} className="text-green-600 mt-1 shrink-0" />
+                <div>
+                  <h4 className="font-bold text-sm text-green-900">
+                    ✅ Current Selection: {currentBusiness.name}
+                  </h4>
+                  <p className="text-xs text-green-700 mt-1">
+                    {currentBusiness.address}
+                  </p>
+                  <p className="text-xs text-green-600 mt-2">
+                    Place ID: {currentBusiness.place_id}
+                  </p>
                 </div>
               </div>
-            )}
-          </div>
-        </LoadScript>
+            </div>
+          )}
+        </div>
       </DialogContent>
     </Dialog>
   );
