@@ -29,13 +29,18 @@ export function BusinessSelector({ currentBusiness, onSelectBusiness }: Business
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
 
   const onLoad = (autocompleteInstance: google.maps.places.Autocomplete) => {
+    console.log("Autocomplete loaded:", autocompleteInstance);
     setAutocomplete(autocompleteInstance);
   };
 
   const onPlaceChanged = () => {
-    if (!autocomplete) return;
+    if (!autocomplete) {
+      console.log("No autocomplete instance");
+      return;
+    }
 
     const place = autocomplete.getPlace();
+    console.log("Place selected:", place);
 
     if (!place.place_id || !place.name || !place.formatted_address) {
       setError("Please select a valid business from the dropdown");
@@ -50,6 +55,14 @@ export function BusinessSelector({ currentBusiness, onSelectBusiness }: Business
       return;
     }
 
+    console.log("Creating business object:", {
+      name: place.name,
+      address: place.formatted_address,
+      place_id: place.place_id,
+      lat,
+      lng
+    });
+
     const business: Business = {
       id: place.place_id,
       user_id: "current_user",
@@ -63,6 +76,7 @@ export function BusinessSelector({ currentBusiness, onSelectBusiness }: Business
       updated_at: new Date().toISOString()
     };
 
+    console.log("Calling onSelectBusiness with:", business);
     onSelectBusiness(business);
     setIsOpen(false);
     setError(null);
