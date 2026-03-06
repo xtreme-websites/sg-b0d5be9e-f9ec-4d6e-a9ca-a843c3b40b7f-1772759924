@@ -28,7 +28,7 @@ export function Timeline({ snapshots, activeSnapshotId, onSelectSnapshot }: Time
           <div className="relative z-10 w-full flex justify-between items-center">
             {snapshots.map((snap) => {
               const isActive = snap.id === activeSnapshotId;
-              const date = new Date(snap.timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+              const date = new Date(snap.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
               
               // Determine color based on rank improvement (mock logic for now, could be real)
               const colorClass = snap.avg_rank < 5 ? "bg-green-500" : "bg-indigo-500";
