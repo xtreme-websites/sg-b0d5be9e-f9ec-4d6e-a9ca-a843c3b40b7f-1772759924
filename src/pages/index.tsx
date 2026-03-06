@@ -53,8 +53,6 @@ export default function Dashboard() {
     try {
       // In a real app with auth, we'd get the user ID from context
       // For now, we'll try to fetch businesses or create a mock one
-      // Note: This requires the user to be authenticated in Supabase or RLS to be open
-      // Since we can't easily auth here, we might need to rely on the mock/local state for the demo
       
       // Simulating data load for the preview
       setTimeout(() => {
@@ -62,12 +60,12 @@ export default function Dashboard() {
           id: "1",
           user_id: "user_1",
           ghl_subaccount_id: null,
-          business_name: "Clockwork Pizza",
+          name: "Clockwork Pizza", // Updated property name
           address: "7520 S Rural Rd Ste A9, Tempe, AZ 85283",
           place_id: "ChIJ...",
           subscription_tier: "Standard",
           reporting_enabled: true,
-          verified: true,
+          // verified: true, // Removed
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         };
@@ -87,9 +85,13 @@ export default function Dashboard() {
         // Mock snapshots
         const mockSnapshots: Snapshot[] = [
           {
-            id: "s1", keyword_id: "1", business_id: "1", timestamp: new Date().toISOString(),
-            avg_rank: 1.1, visibility_score: 98,
-            grid_data: { points: MOCK_POINTS },
+            id: "s1", 
+            keyword_id: "1", 
+            // business_id: "1", // Removed
+            // timestamp: new Date().toISOString(), // Removed
+            avg_rank: 1.1, 
+            visibility_score: 98,
+            points: MOCK_POINTS, // Flattened structure
             created_at: new Date().toISOString()
           }
         ];
@@ -125,7 +127,7 @@ export default function Dashboard() {
   };
 
   const selectedPointData = selectedPointIndex !== null && currentSnapshot
-    ? currentSnapshot.grid_data.points[selectedPointIndex]
+    ? currentSnapshot.points[selectedPointIndex]
     : null;
 
   return (
@@ -143,7 +145,7 @@ export default function Dashboard() {
         onAddKeyword={handleAddKeyword}
         selectedKeywordId={selectedKeywordId}
         onSelectKeyword={handleSelectKeyword}
-        businessName={currentBusiness?.business_name || "Loading..."}
+        businessName={currentBusiness?.name || "Loading..."}
       />
 
       {/* Main Content Area */}
@@ -202,7 +204,7 @@ export default function Dashboard() {
                           <div className="flex items-center gap-3">
                              <div className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center text-red-500"><MapPin size={16}/></div>
                              <div>
-                                <h4 className="font-black text-sm text-slate-800">{currentBusiness?.business_name}</h4>
+                                <h4 className="font-black text-sm text-slate-800">{currentBusiness?.name}</h4>
                                 <p className="text-[10px] font-bold text-slate-400 truncate w-48">{currentBusiness?.address}</p>
                              </div>
                           </div>
@@ -227,7 +229,7 @@ export default function Dashboard() {
                     <div className="absolute inset-0 z-10 flex items-center justify-center p-12 lg:p-24">
                       {currentSnapshot && (
                         <RankGrid 
-                          points={currentSnapshot.grid_data.points}
+                          points={currentSnapshot.points}
                           onPointClick={(point, index) => setSelectedPointIndex(index)}
                           selectedPointIndex={selectedPointIndex}
                         />
@@ -246,7 +248,7 @@ export default function Dashboard() {
                   </div>
                   <div className="flex-1 overflow-y-auto">
                     {(selectedPointData?.competitors || [
-                      { name: currentBusiness?.business_name || "Your Business", rank: 1, reviews: 44, rating: 5.0, you: true },
+                      { name: currentBusiness?.name || "Your Business", rank: 1, reviews: 44, rating: 5.0, you: true },
                       { name: "Competitor A", rank: 2, reviews: 201, rating: 5.0, you: false },
                       { name: "Competitor B", rank: 3, reviews: 9, rating: 5.0, you: false },
                     ]).map((comp, i) => (

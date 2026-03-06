@@ -1,5 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
-import type { Business, Keyword, Snapshot } from "@/types";
+import type { Business, Keyword, Snapshot, GridPoint } from "@/types";
 
 export const businessService = {
   async getBusinessesByUser(userId: string) {
@@ -95,7 +95,7 @@ export const businessService = {
       .from("snapshots")
       .select("*")
       .eq("keyword_id", keywordId)
-      .order("timestamp", { ascending: false })
+      .order("created_at", { ascending: false }) // Changed from timestamp to created_at
       .limit(limit);
 
     if (error) {
@@ -103,13 +103,26 @@ export const businessService = {
       throw error;
     }
 
-    return data as Snapshot[];
+    // Explicitly cast the data to match Snapshot interface
+    // The 'points' field from DB is Json, we cast it to GridPoint[]
+    return (data || []).map(item => ({
+      ...item,
+      points: item.points as unknown as GridPoint[]
+    })) as Snapshot[];
   },
 
   async createSnapshot(snapshot: Omit<Snapshot, "id" | "created_at">) {
+    // Need to handle the points array specifically for insertion
+    const dbSnapshot = {
+      keyword_id: snapshot.keyword_id,
+      avg_rank: snapshot.avg_rank,
+      visibility_score: snapshot.visibility_score,
+      points: snapshot.points as unknown as any // Cast to any for Supabase Json insert
+    };
+
     const { data, error } = await supabase
       .from("snapshots")
-      .insert([snapshot])
+      .insert([dbSnapshot])
       .select()
       .single();
 
@@ -118,6 +131,9 @@ export const businessService = {
       throw error;
     }
 
-    return data as Snapshot;
+    return {
+      ...data,
+      points: data.points as unknown as GridPoint[]
+    } as Snapshot;
   }
 };

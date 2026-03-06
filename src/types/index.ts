@@ -13,12 +13,12 @@ export interface Business {
   id: string;
   user_id: string;
   ghl_subaccount_id: string | null;
-  business_name: string;
+  name: string; // Changed from business_name to match DB
   address: string;
   place_id: string;
   subscription_tier: string;
   reporting_enabled: boolean;
-  verified: boolean;
+  // verified: boolean; // Removed as it's not in DB
   created_at: string;
   updated_at: string;
 }
@@ -48,13 +48,11 @@ export interface GridPoint {
 export interface Snapshot {
   id: string;
   keyword_id: string;
-  business_id: string;
-  timestamp: string;
+  // business_id: string; // Removed, normalized in DB
+  // timestamp: string; // Removed, use created_at
   avg_rank: number;
   visibility_score: number;
-  grid_data: {
-    points: GridPoint[];
-  };
+  points: GridPoint[]; // Flattened from grid_data
   created_at: string;
 }
 
