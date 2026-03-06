@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Search, MapPin, Building2, Loader2 } from "lucide-react";
+import { Search, MapPin, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -17,41 +17,52 @@ interface BusinessSelectorProps {
   onSelectBusiness: (business: Business) => void;
 }
 
+// Global callback for Google Maps API
+declare global {
+  interface Window {
+    initGoogleMaps?: () => void;
+  }
+}
+
 export function BusinessSelector({ currentBusiness, onSelectBusiness }: BusinessSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
+  const scriptLoadedRef = useRef(false);
 
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
 
-  // Load Google Maps Script manually
+  // Load Google Maps Script with proper callback
   useEffect(() => {
-    if (!apiKey || !isOpen) return;
+    if (!apiKey || !isOpen || scriptLoadedRef.current) return;
 
-    console.log("🔧 Dialog opened, checking for Google Maps API...");
+    console.log("🔧 Dialog opened, loading Google Maps API with callback...");
 
-    // Check if Google Maps is already loaded
+    // Define the callback function globally
+    window.initGoogleMaps = () => {
+      console.log("✅ Google Maps API loaded via callback!");
+      scriptLoadedRef.current = true;
+      initializeAutocomplete();
+    };
+
+    // Check if already loaded
     if (window.google?.maps?.places) {
       console.log("✅ Google Maps API already loaded");
+      scriptLoadedRef.current = true;
       initializeAutocomplete();
       return;
     }
 
-    console.log("📥 Loading Google Maps API...");
+    console.log("📥 Creating script tag with callback...");
 
-    // Create script tag
+    // Create script tag with callback parameter
     const script = document.createElement("script");
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&callback=initGoogleMaps`;
     script.async = true;
     script.defer = true;
     
-    script.onload = () => {
-      console.log("✅ Google Maps API loaded successfully");
-      initializeAutocomplete();
-    };
-
     script.onerror = () => {
       console.error("❌ Failed to load Google Maps API");
       setError("Failed to load Google Maps. Please check your API key.");
@@ -73,24 +84,34 @@ export function BusinessSelector({ currentBusiness, onSelectBusiness }: Business
       return;
     }
 
+    if (!window.google?.maps?.places) {
+      console.error("❌ Google Maps Places library not available");
+      return;
+    }
+
     console.log("🔧 Initializing autocomplete on input...");
 
-    // Create autocomplete instance
-    const autocomplete = new google.maps.places.Autocomplete(inputRef.current, {
-      types: ["establishment"],
-      fields: ["place_id", "name", "formatted_address", "geometry", "vicinity"]
-    });
+    try {
+      // Create autocomplete instance
+      const autocomplete = new google.maps.places.Autocomplete(inputRef.current, {
+        types: ["establishment"],
+        fields: ["place_id", "name", "formatted_address", "geometry", "vicinity"]
+      });
 
-    console.log("✅ Autocomplete instance created");
+      console.log("✅ Autocomplete instance created");
 
-    // Add place_changed listener
-    autocomplete.addListener("place_changed", () => {
-      console.log("🔔 place_changed event fired!");
-      handlePlaceSelection(autocomplete);
-    });
+      // Add place_changed listener
+      autocomplete.addListener("place_changed", () => {
+        console.log("🔔 place_changed event fired!");
+        handlePlaceSelection(autocomplete);
+      });
 
-    autocompleteRef.current = autocomplete;
-    console.log("✅ Event listener attached successfully");
+      autocompleteRef.current = autocomplete;
+      console.log("✅ Event listener attached successfully");
+    } catch (err) {
+      console.error("❌ Error creating autocomplete:", err);
+      setError("Failed to initialize autocomplete. Please try again.");
+    }
   };
 
   const handlePlaceSelection = (autocomplete: google.maps.places.Autocomplete) => {
