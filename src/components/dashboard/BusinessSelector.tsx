@@ -19,10 +19,10 @@ interface BusinessSelectorProps {
 
 export function BusinessSelector({ currentBusiness, onSelectBusiness }: BusinessSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
+  const placeSelectedRef = useRef(false);
 
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
 
@@ -62,8 +62,11 @@ export function BusinessSelector({ currentBusiness, onSelectBusiness }: Business
     return () => {
       // Cleanup autocomplete listener when dialog closes
       if (autocompleteRef.current) {
+        console.log("🧹 Cleaning up autocomplete listeners");
         google.maps.event.clearInstanceListeners(autocompleteRef.current);
+        autocompleteRef.current = null;
       }
+      placeSelectedRef.current = false;
     };
   }, [isOpen, apiKey]);
 
@@ -86,6 +89,7 @@ export function BusinessSelector({ currentBusiness, onSelectBusiness }: Business
     // Add place_changed listener
     autocomplete.addListener("place_changed", () => {
       console.log("🔔 place_changed event fired!");
+      placeSelectedRef.current = true;
       handlePlaceSelection(autocomplete);
     });
 
@@ -100,20 +104,8 @@ export function BusinessSelector({ currentBusiness, onSelectBusiness }: Business
     console.log("📍 Place object received:", place);
 
     // Validate we have minimum required data
-    if (!place) {
-      console.error("❌ No place data returned");
-      setError("No place selected. Please choose from the dropdown.");
-      return;
-    }
-
-    if (!place.place_id) {
-      console.error("❌ Missing place_id");
-      setError("Invalid place selected. Please choose a business from the dropdown.");
-      return;
-    }
-
-    if (!place.name) {
-      console.error("❌ Missing name");
+    if (!place || !place.place_id || !place.name) {
+      console.error("❌ Invalid place data:", { place });
       setError("Invalid place selected. Please choose a business from the dropdown.");
       return;
     }
@@ -157,6 +149,15 @@ export function BusinessSelector({ currentBusiness, onSelectBusiness }: Business
     console.log("✅ Selection complete!");
   };
 
+  const handleInputBlur = () => {
+    // Delay closing to allow place_changed event to fire first (for mouse clicks)
+    setTimeout(() => {
+      if (!placeSelectedRef.current) {
+        console.log("⚠️ Input blurred without selection");
+      }
+    }, 200);
+  };
+
   if (!apiKey) {
     return (
       <div className="px-2 py-4 text-center">
@@ -171,7 +172,17 @@ export function BusinessSelector({ currentBusiness, onSelectBusiness }: Business
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+    <Dialog open={isOpen} onOpenChange={(open) => {
+      setIsOpen(open);
+      if (!open) {
+        // Reset state when dialog closes
+        setError(null);
+        placeSelectedRef.current = false;
+        if (inputRef.current) {
+          inputRef.current.value = "";
+        }
+      }
+    }}>
       <DialogTrigger asChild>
         <Button
           variant="ghost"
@@ -220,6 +231,7 @@ export function BusinessSelector({ currentBusiness, onSelectBusiness }: Business
               ref={inputRef}
               placeholder="Start typing business name (e.g., Starbucks Phoenix)..."
               className="h-11"
+              onBlur={handleInputBlur}
               onKeyDown={(e) => {
                 // Prevent form submission on Enter
                 if (e.key === "Enter") {
@@ -229,6 +241,9 @@ export function BusinessSelector({ currentBusiness, onSelectBusiness }: Business
             />
             <p className="text-xs text-slate-500 mt-2">
               💡 Type your business name and location, then select from dropdown
+            </p>
+            <p className="text-xs text-slate-400 mt-1">
+              ⌨️ Use arrow keys + Enter for reliable selection
             </p>
           </div>
 
